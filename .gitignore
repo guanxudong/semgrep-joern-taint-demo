@@ -1,0 +1,25 @@
+# uv
+.venv/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# Demo data
+*.db
+*.sqlite3
+
+# Joern CPGs and workspace
+bad_demo_cpg.bin
+workspace/
+*.cpg.bin
+
+# Semgrep outputs
+semgrep_results.json
+semgrep_df.json
+semgrep_scan.log
+
+# Generated reports
+joern_walkthrough.html
