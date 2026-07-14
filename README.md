@@ -14,7 +14,7 @@ deliberate and unpatched for educational purposes.
   sources (e.g. `request.args.get`) across multiple files to the final sinks
   (e.g. `cursor.execute`, `os.system`, `requests.get`).
 - A small Python bridge maps Semgrep findings to their enclosing functions so
-  you can compare rule-based and graph-based results.
+  you can use the results alongside the CPG-based function mapping.
 
 ## Prerequisites
 
@@ -168,18 +168,8 @@ semgrep --config=auto --json --output=semgrep_results.json src/bad_demo
 python scripts/map_semgrep_to_functions.py semgrep_results.json
 ```
 
-Compare this output with `joern/joern_map_semgrep.sc` to show the difference
-between AST-based and CPG-based function resolution.
-
-## Comparing the two approaches
-
-| Capability | Semgrep | Joern |
-| ---------- | ------- | ----- |
-| Speed | Very fast | Slower (CPG construction) |
-| Setup | Minimal | Requires Joern install |
-| Cross-file taint | Limited | Native |
-| Custom rules | Easy YAML patterns | Scala/CPG queries |
-| Call-graph context | Basic | Rich |
+You can also produce the same function mapping from the CPG by running
+`joern/joern_map_semgrep.sc` after generating the Semgrep results.
 
 ## License
 
