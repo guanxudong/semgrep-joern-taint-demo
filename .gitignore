@@ -1,25 +1,14 @@
-# uv
-.venv/
-
-# Python
-__pycache__/
-*.py[cod]
-*.egg-info/
-.pytest_cache/
-
-# Demo data
-*.db
-*.sqlite3
-
-# Joern CPGs and workspace
-bad_demo_cpg.bin
-workspace/
+# Generated analysis artifacts
 *.cpg.bin
-
-# Semgrep outputs
-semgrep_results.json
-semgrep_df.json
+*.bin
+workspace/
+semgrep_*.json
 semgrep_scan.log
 
-# Generated reports
-joern_walkthrough.html
+# Runtimes / deps
+node_modules/
+__pycache__/
+.venv/
+
+# OS
+.DS_Store

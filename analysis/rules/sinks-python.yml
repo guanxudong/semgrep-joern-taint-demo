@@ -1,0 +1,79 @@
+rules:
+  - id: py-sink-sqli
+    languages: [python]
+    severity: WARNING
+    message: SQL execute call (potential SQL injection sink)
+    metadata: { vuln_type: sqli, cwe: "89" }
+    pattern-either:
+      - pattern: $CUR.execute($SQL)
+      - pattern: $CUR.executemany($SQL, ...)
+
+  - id: py-sink-cmdi
+    languages: [python]
+    severity: WARNING
+    message: OS command execution (potential command injection sink)
+    metadata: { vuln_type: cmdi, cwe: "78" }
+    pattern-either:
+      - pattern: os.system($CMD)
+      - pattern: os.popen($CMD)
+      - pattern: subprocess.$F($CMD, ..., shell=True, ...)
+
+  - id: py-sink-rce
+    languages: [python]
+    severity: WARNING
+    message: Dynamic code evaluation (potential RCE sink)
+    metadata: { vuln_type: rce, cwe: "94" }
+    pattern-either:
+      - pattern: eval($X)
+      - pattern: exec($X)
+
+  - id: py-sink-path-traversal
+    languages: [python]
+    severity: WARNING
+    message: Filesystem open (potential path traversal sink)
+    metadata: { vuln_type: path-traversal, cwe: "22" }
+    pattern-either:
+      - pattern: open($P, ...)
+      - pattern: $M.send_file($P, ...)
+
+  - id: py-sink-xxe
+    languages: [python]
+    severity: WARNING
+    message: XML parsing (potential XXE sink)
+    metadata: { vuln_type: xxe, cwe: "611" }
+    pattern-either:
+      - pattern: $M.XMLParser(...)
+      - pattern: $M.fromstring($X, ...)
+      - pattern: $M.parse($X, ...)
+      - pattern: $M.parseString($X, ...)
+
+  - id: py-sink-deserialization
+    languages: [python]
+    severity: WARNING
+    message: Deserialization of data (potential unsafe deserialization sink)
+    metadata: { vuln_type: deserialization, cwe: "502" }
+    pattern-either:
+      - pattern: pickle.loads($D)
+      - pattern: pickle.load($D)
+      - pattern: yaml.load($D)
+      - pattern: marshal.loads($D)
+
+  - id: py-sink-ssti
+    languages: [python]
+    severity: WARNING
+    message: Server-side template rendering (potential SSTI sink)
+    metadata: { vuln_type: ssti, cwe: "1336" }
+    pattern-either:
+      - pattern: render_template_string($T, ...)
+      - pattern: $ENV.from_string($T)
+
+  - id: py-sink-xss
+    languages: [python]
+    severity: WARNING
+    message: HTML string concatenation returned to client (potential XSS sink)
+    metadata: { vuln_type: xss, cwe: "79" }
+    patterns:
+      - pattern: return $HTML + $X
+      - metavariable-regex:
+          metavariable: $HTML
+          regex: '"[^"]*<[^"]*"'

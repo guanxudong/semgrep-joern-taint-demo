@@ -1,0 +1,72 @@
+rules:
+  - id: java-sink-sqli
+    languages: [java]
+    severity: WARNING
+    message: SQL execute call (potential SQL injection sink)
+    metadata: { vuln_type: sqli, cwe: "89" }
+    pattern-either:
+      - pattern: $S.executeQuery($Q)
+      - pattern: $S.executeUpdate($Q)
+      - pattern: $S.execute($Q)
+
+  - id: java-sink-cmdi
+    languages: [java]
+    severity: WARNING
+    message: OS command execution (potential command injection sink)
+    metadata: { vuln_type: cmdi, cwe: "78" }
+    pattern-either:
+      - pattern: Runtime.getRuntime().exec($C)
+      - pattern: $R.exec($C)
+      - pattern: new ProcessBuilder($C).start()
+
+  - id: java-sink-rce
+    languages: [java]
+    severity: WARNING
+    message: Script engine evaluation (potential RCE sink)
+    metadata: { vuln_type: rce, cwe: "94" }
+    pattern: $E.eval($X)
+
+  - id: java-sink-path-traversal
+    languages: [java]
+    severity: WARNING
+    message: Filesystem read (potential path traversal sink)
+    metadata: { vuln_type: path-traversal, cwe: "22" }
+    pattern-either:
+      - pattern: Files.readAllBytes($P)
+      - pattern: Files.readString($P)
+      - pattern: new FileInputStream($P)
+      - pattern: new FileReader($P)
+
+  - id: java-sink-xxe
+    languages: [java]
+    severity: WARNING
+    message: XML parsing (potential XXE sink)
+    metadata: { vuln_type: xxe, cwe: "611" }
+    pattern-either:
+      - pattern: $B.parse($X)
+      - pattern: $R.read($X)
+
+  - id: java-sink-deserialization
+    languages: [java]
+    severity: WARNING
+    message: Java native deserialization (potential unsafe deserialization sink)
+    metadata: { vuln_type: deserialization, cwe: "502" }
+    pattern: $O.readObject()
+
+  - id: java-sink-ssti
+    languages: [java]
+    severity: WARNING
+    message: Template built from a string (potential SSTI sink)
+    metadata: { vuln_type: ssti, cwe: "1336" }
+    pattern: new Template($N, $T, $C)
+
+  - id: java-sink-xss
+    languages: [java]
+    severity: WARNING
+    message: HTML string concatenation returned to client (potential XSS sink)
+    metadata: { vuln_type: xss, cwe: "79" }
+    patterns:
+      - pattern: return $HTML + $X;
+      - metavariable-regex:
+          metavariable: $HTML
+          regex: '"[^"]*<[^"]*"'

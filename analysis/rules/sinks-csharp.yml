@@ -1,0 +1,68 @@
+rules:
+  - id: cs-sink-sqli
+    languages: [csharp]
+    severity: WARNING
+    message: SQL command execution (potential SQL injection sink)
+    metadata: { vuln_type: sqli, cwe: "89" }
+    pattern-either:
+      - pattern: $C.ExecuteReader()
+      - pattern: $C.ExecuteNonQuery()
+      - pattern: $C.ExecuteScalar()
+
+  - id: cs-sink-cmdi
+    languages: [csharp]
+    severity: WARNING
+    message: Process execution (potential command injection sink)
+    metadata: { vuln_type: cmdi, cwe: "78" }
+    pattern: Process.Start($A, ...)
+
+  - id: cs-sink-rce
+    languages: [csharp]
+    severity: WARNING
+    message: Dynamic code compilation (potential RCE sink)
+    metadata: { vuln_type: rce, cwe: "94" }
+    pattern: $P.CompileAssemblyFromSource($O, $S)
+
+  - id: cs-sink-path-traversal
+    languages: [csharp]
+    severity: WARNING
+    message: Filesystem read (potential path traversal sink)
+    metadata: { vuln_type: path-traversal, cwe: "22" }
+    pattern-either:
+      - pattern: File.ReadAllText($P)
+      - pattern: File.ReadAllBytes($P)
+      - pattern: File.OpenRead($P)
+
+  - id: cs-sink-xxe
+    languages: [csharp]
+    severity: WARNING
+    message: XML parsing (potential XXE sink)
+    metadata: { vuln_type: xxe, cwe: "611" }
+    pattern-either:
+      - pattern: XmlReader.Create($S, $X)
+      - pattern: $D.Load($R)
+      - pattern: $D.LoadXml($X)
+
+  - id: cs-sink-deserialization
+    languages: [csharp]
+    severity: WARNING
+    message: BinaryFormatter deserialization (potential unsafe deserialization sink)
+    metadata: { vuln_type: deserialization, cwe: "502" }
+    pattern: $F.Deserialize($S)
+
+  - id: cs-sink-ssti
+    languages: [csharp]
+    severity: WARNING
+    message: Razor template compiled from a string (potential SSTI sink)
+    metadata: { vuln_type: ssti, cwe: "1336" }
+    pattern-either:
+      - pattern: $S.RunCompile($T, ...)
+      - pattern: $S.Compile($T, ...)
+
+  - id: cs-sink-xss
+    languages: [csharp]
+    severity: WARNING
+    message: HTML string concatenation returned to client (potential XSS sink)
+    metadata: { vuln_type: xss, cwe: "79" }
+    patterns:
+      - pattern: Content($HTML + $X, "text/html")

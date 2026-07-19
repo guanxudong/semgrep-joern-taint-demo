@@ -1,94 +1,59 @@
-# Agent Guidance: Bad Demo
+# Agent Guidance: SAST Benchmark Targets
 
-This repository is an **intentionally vulnerable** Python/Flask application used
-to demonstrate SAST, cross-file taint analysis, and OWASP Top 10 coverage with
-Semgrep and Joern.
+This repository contains **intentionally vulnerable** test-target projects used
+to benchmark an LLM + Semgrep + Joern SAST pipeline.
 
 ## Core constraints
 
 - **Do not fix the vulnerabilities.** Every weakness is deliberate and serves
-  the demo. Patches should only be added if the user explicitly asks for a
-  "fixed" comparison branch or exercise.
-- **Do not add production-grade hardening.** Avoid adding authentication,
-  authorization, parameterized queries, or other fixes that would break the
-  intentionally vulnerable examples.
-- **Keep dependencies intentionally outdated.** `pyproject.toml` pins older
-  versions (e.g. Flask 2.0.0, Werkzeug <2.1, requests 2.25.0) to demonstrate
-  A06:2021. Do not upgrade them unless the user specifically requests it.
-- **Do not commit generated artifacts.** CPGs (`bad_demo_cpg.bin`, `workspace/`,
-  `*.cpg.bin`), Semgrep outputs (`semgrep_results.json`, `semgrep_df.json`,
-  `semgrep_scan.log`), and generated reports (`joern_walkthrough.html`) are all
-  gitignored and must be regenerated locally.
+  the benchmark. This also applies to the **negative samples** (`SAFE:`
+  entries) — they are already safe on purpose; do not "harden" anything else,
+  and do not convert a vulnerable entry into a safe one or vice versa.
+- **Source-only projects.** The targets are parsed by Semgrep/Joern, never
+  compiled or run. Do not add build files (`pom.xml`, `package.json`,
+  `*.csproj`, `pyproject.toml`) unless the user explicitly asks.
+- **Do not commit generated artifacts.** CPGs (`*.cpg.bin`, `*.bin`,
+  `workspace/`) and Semgrep outputs (`semgrep_*.json`) are gitignored and must
+  be regenerated locally.
 
-## Project layout
+## Layout
 
-- `src/bad_demo/` - Vulnerable application code. Each file maps to one or more
-  OWASP Top 10 2021 categories.
-- `joern/` - Scala/Joern query scripts for graph-based taint analysis.
-- `scripts/` - Python helpers for processing Semgrep JSON output.
-- `pyproject.toml` - uv-based Python project configuration.
+- `targets/java-spring/` — Spring Boot style (source only)
+- `targets/js-ts-express/` — Express, mixed .js/.ts (source only)
+- `targets/python-flask/` — Flask blueprints (source only)
+- `targets/csharp-aspnet/` — ASP.NET Core style (source only)
+- Each target has `ground_truth.json` + `GROUND_TRUTH.md` (kept in sync).
+- `analysis/rules/` — Semgrep sink rules per language (8 category-A classes).
+- `analysis/joern/` — Joern scripts: entrypoint enumeration, sink→entrypoint
+  backward trace, entrypoint→down forward trace, chain source-snippet
+  extraction (`extract_chain_snippets.sc`; set `SRC_ROOT` to the parse root),
+  dataflow taint confirmation (`taint_confirm.sc`).
+- `scripts/semgrep_to_sinks.py` — converts Semgrep JSON into the sink list
+  consumed by `backward_from_sinks.sc` (via `SINKS_FILE`).
 
-## Build and run
+## Vulnerability taxonomy
 
-Use `uv` for all Python operations:
+15 classes per project: 8 sink-based category A (sqli, xss, cmdi,
+path-traversal, rce, xxe, deserialization, ssti) and 7 non-sink category B
+(idor, business-logic, race-condition, priv-esc, mass-assignment,
+broken-access-control, auth-flaws), plus 5 negative samples.
 
-```bash
-uv sync              # install dependencies
-uv run bad-demo      # run the Flask app
-uvx bandit -r src/bad_demo   # optional Bandit scan
-```
+## Changing the targets
 
-## Working with Joern scripts
+When adding/modifying a vulnerability:
 
-All scripts in `joern/` assume the current working directory is the repository
-root because they use relative paths such as `bad_demo_cpg.bin` and
-`src/bad_demo/...`.
-
-Generate the CPG first:
-
-```bash
-joern-parse src/bad_demo --output bad_demo_cpg.bin
-```
-
-Then run individual scripts:
-
-```bash
-joern --script joern/cpg_overview.sc
-joern --script joern/find_sinks.sc
-```
-
-When editing Joern scripts:
-- Keep imports explicit: `io.shiftleft.semanticcpg.language._` and
-  `io.joern.dataflowengineoss.language._` where taint is needed.
-- Prefer `.l` or `.nonEmpty` to force evaluation before printing.
-- Preserve the tutorial style: print clear section headers and concise output.
-
-## Working with Python helpers
-
-`scripts/map_semgrep_to_functions.py` is a standalone CLI tool. It expects a
-Semgrep JSON file:
-
-```bash
-python scripts/map_semgrep_to_functions.py semgrep_results.json
-```
-
-Keep it compatible with Python 3.10+ and avoid adding third-party dependencies.
-
-## README maintenance
-
-When adding new vulnerability examples or analysis scripts:
-1. Update the OWASP Top 10 mapping table in `README.md`.
-2. Add cross-file taint examples if the new code spans multiple files.
-3. List new Joern scripts in the script reference table.
-4. Keep the tutorial flow: Semgrep scan → CPG generation → Joern scripts →
-   Python bridge.
+1. Keep the `VULN: <id>` / `SAFE: <id>` comment directly above the handler.
+2. Update **both** `ground_truth.json` and `GROUND_TRUTH.md` in that project —
+   ids, routes, functions, sink, chain must match the code exactly.
+3. Mirror the change across the other three projects if it is a taxonomic
+   change (same `vuln_type` set everywhere).
+4. Validate: `python3 -m json.tool <project>/ground_truth.json` and, for
+   Python files, `python3 -m py_compile`.
 
 ## Testing changes
 
-Before declaring work complete:
-- Run `uv run python -m py_compile src/bad_demo/*.py scripts/*.py` to confirm
-  Python files are syntactically valid.
-- Run `uv run bad-demo` briefly to confirm the Flask app starts.
-- Run `semgrep --config=auto src/bad_demo` to confirm findings still appear.
-- If you changed a Joern script, regenerate the CPG and run the script to
-  confirm it still executes without errors.
+- Python: `python3 -m py_compile` all `.py` in the target.
+- JS: `node --check` all `.js` in the target (TS is verified via joern-parse).
+- All: `python3 -m json.tool` on each `ground_truth.json`.
+- Parse check: `joern-parse targets/<name> --output /tmp/<name>.cpg.bin` must
+  succeed; `semgrep targets/<name>` must run without parse errors.

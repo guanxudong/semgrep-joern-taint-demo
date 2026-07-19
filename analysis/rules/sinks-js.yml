@@ -1,0 +1,72 @@
+rules:
+  - id: js-sink-sqli
+    languages: [js, ts]
+    severity: WARNING
+    message: SQL query call (potential SQL injection sink)
+    metadata: { vuln_type: sqli, cwe: "89" }
+    pattern-either:
+      - pattern: $DB.query($Q, ...)
+      - pattern: $DB.execute($Q, ...)
+
+  - id: js-sink-cmdi
+    languages: [js, ts]
+    severity: WARNING
+    message: OS command execution (potential command injection sink)
+    metadata: { vuln_type: cmdi, cwe: "78" }
+    pattern-either:
+      - pattern: exec($C, ...)
+      - pattern: execSync($C, ...)
+      - pattern: spawn($C, ...)
+      - pattern: spawnSync($C, ...)
+
+  - id: js-sink-rce
+    languages: [js, ts]
+    severity: WARNING
+    message: Dynamic code evaluation (potential RCE sink)
+    metadata: { vuln_type: rce, cwe: "94" }
+    pattern-either:
+      - pattern: eval($X)
+      - pattern: new Function($X)
+
+  - id: js-sink-path-traversal
+    languages: [js, ts]
+    severity: WARNING
+    message: Filesystem read (potential path traversal sink)
+    metadata: { vuln_type: path-traversal, cwe: "22" }
+    pattern-either:
+      - pattern: fs.readFileSync($P, ...)
+      - pattern: fs.readFile($P, ...)
+      - pattern: fs.createReadStream($P, ...)
+
+  - id: js-sink-xxe
+    languages: [js, ts]
+    severity: WARNING
+    message: XML parsing (potential XXE sink)
+    metadata: { vuln_type: xxe, cwe: "611" }
+    pattern: $X.parseXml($D, ...)
+
+  - id: js-sink-deserialization
+    languages: [js, ts]
+    severity: WARNING
+    message: Deserialization of data (potential unsafe deserialization sink)
+    metadata: { vuln_type: deserialization, cwe: "502" }
+    pattern-either:
+      - pattern: $S.unserialize($D, ...)
+      - pattern: $S.deserialize($D, ...)
+
+  - id: js-sink-ssti
+    languages: [js, ts]
+    severity: WARNING
+    message: Template rendering from a string (potential SSTI sink)
+    metadata: { vuln_type: ssti, cwe: "1336" }
+    pattern-either:
+      - pattern: ejs.render($T, ...)
+      - pattern: $H.compile($T)
+
+  - id: js-sink-xss
+    languages: [js, ts]
+    severity: WARNING
+    message: HTML string concatenation sent to client (potential XSS sink)
+    metadata: { vuln_type: xss, cwe: "79" }
+    patterns:
+      - pattern: $RES.send($HTML + $X)

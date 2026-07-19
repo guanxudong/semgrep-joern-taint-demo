@@ -1,176 +1,162 @@
-# Bad Demo: Taint Analysis Tutorial
+# SAST Benchmark Targets (Semgrep + Joern + LLM)
 
-An intentionally vulnerable Python project for demonstrating **cross-file taint
-analysis** with **Semgrep** and **Joern**. Every weakness is mapped to an
-OWASP Top 10 2021 category so the demo can double as a SAST tool comparison.
+Intentionally vulnerable, simplified web projects in four language stacks, built
+to evaluate an **LLM + Semgrep + Joern** SAST pipeline:
 
-> ⚠️ **DO NOT deploy or use this code in production.** All vulnerabilities are
-deliberate and unpatched for educational purposes.
+1. **Category A (sink-based)** — Semgrep finds sink call sites; Joern traces
+   taint backward from each sink to its HTTP entrypoint.
+2. **Category B (non-sink)** — Joern identifies entrypoints and reasons forward
+   down the call chain for business-logic flaws.
 
-## What you will see
+> ⚠️ **DO NOT deploy or run this code.** Every vulnerability is deliberate.
+> The projects are *source-only*: they are meant to be parsed by Semgrep and
+> Joern, not compiled or executed. Imported frameworks are not installed.
 
-- **Semgrep** quickly finds risky call sites (sinks) using lightweight rules.
-- **Joern** builds a Code Property Graph (CPG) and traces taint from HTTP
-  sources (e.g. `request.args.get`) across multiple files to the final sinks
-  (e.g. `cursor.execute`, `os.system`, `requests.get`).
-- A small Python bridge maps Semgrep findings to their enclosing functions so
-  you can use the results alongside the CPG-based function mapping.
+## Layout
 
-## Prerequisites
-
-- [uv](https://docs.astral.sh/uv/) for Python dependencies
-- [Semgrep](https://semgrep.dev/) for rule-based scanning
-- [Joern](https://joern.io/) for graph-based taint analysis
-
-The `.python-version` file pins the interpreter to **CPython 3.11**, which is
-compatible with the intentionally older Flask/Werkzeug versions used for the
-A06:2021 demonstration.
-
-## Project layout
-
-```text
-src/bad_demo/
-├── app.py              # Flask routes that wire sources to sinks
-├── auth.py             # Broken authentication / JWT (A07)
-├── config.py           # Hardcoded secrets, debug mode (A05)
-├── crypto.py           # Weak hashing and crypto (A02)
-├── db.py               # SQL injection sinks (A03)
-├── deserialization.py  # Pickle / YAML unsafe load (A08)
-├── exec_utils.py       # OS command injection (A03)
-├── http_utils.py       # SSRF (A10)
-├── ldap_utils.py       # LDAP injection (A03)
-├── logging_utils.py    # Sensitive data in logs (A09)
-├── templates.py        # Reflected / stored XSS (A03)
-└── templates/          # Jinja2 templates with | safe filters
-
-joern/                  # Joern query scripts (run from repo root)
-scripts/                # Python helpers that work with Semgrep JSON output
+```
+targets/
+├── java-spring/        Java + Spring Boot style (@RestController)
+├── js-ts-express/      Express 4, mixed .js and .ts
+├── python-flask/       Python + Flask (blueprints)
+└── csharp-aspnet/      C# + ASP.NET Core style controllers
 ```
 
-## OWASP Top 10 mapping
+Each project contains `routes|controllers/` (entrypoints), `services/`
+(business logic), `data|db/` (data access sinks), `config/` (hardcoded
+secrets), plus **`ground_truth.json`** (machine-readable scoring baseline) and
+**`GROUND_TRUTH.md`** (human-readable table). Every vulnerable handler carries
+a `VULN: <id>` comment matching its ground-truth id; safe counter-examples
+carry `SAFE: <id>`.
 
-| File(s)                              | Category                                            |
-| ------------------------------------ | --------------------------------------------------- |
-| `app.py` (admin routes)              | A01:2021 - Broken Access Control                    |
-| `crypto.py`, `auth.py`               | A02:2021 - Cryptographic Failures                   |
-| `db.py`, `exec_utils.py`, ...        | A03:2021 - Injection (SQL, XSS, Command, LDAP)      |
-| `app.py` (register)                  | A04:2021 - Insecure Design                          |
-| `config.py`, `app.py` (debug_info)   | A05:2021 - Security Misconfiguration                |
-| `pyproject.toml` (old deps)          | A06:2021 - Vulnerable and Outdated Components       |
-| `auth.py`                            | A07:2021 - Identification and Authentication Failures |
-| `deserialization.py`                 | A08:2021 - Software and Data Integrity Failures     |
-| `logging_utils.py`                   | A09:2021 - Security Logging and Monitoring Failures |
-| `http_utils.py`                      | A10:2021 - Server-Side Request Forgery              |
+## Vulnerability matrix (per project: 17 vulnerable entries + 5 safe)
 
-## Cross-file taint examples
+### Category A — sink-based (Semgrep → sink, Joern → entrypoint)
 
-1. **SQL injection**  
-   `app.py:search()` → `request.args.get("q")` → `db.py:search_users_unsafe()` → `cursor.execute(...)`
+| Type | CWE | Java | JS/TS | Python | C# |
+|------|-----|------|-------|--------|-----|
+| SQL Injection | 89 | `Statement.executeQuery` concat | `mysql.query` concat | `cursor.execute` f-string | `SqlCommand` concat |
+| XSS | 79 | HTML concat response | `res.send` concat | HTML concat response | `Content(..., "text/html")` concat |
+| Command Injection | 78 | `Runtime.exec` | `child_process.exec` | `os.system` | `Process.Start("cmd.exe","/c ...")` |
+| Path Traversal | 22 | `Files.readAllBytes` | `fs.readFileSync` | `open(base+name)` | `File.ReadAllText` |
+| RCE (code eval) | 94 | `ScriptEngine.eval` | `eval()` | `eval()` | CodeDom `CompileAssemblyFromSource` |
+| XXE | 611 | `DocumentBuilderFactory` (DTD on) | `libxmljs noent:true` | lxml `resolve_entities=True` | `DtdProcessing.Parse` + resolver |
+| Deserialization | 502 | `ObjectInputStream.readObject` | `node-serialize.unserialize` | `pickle.loads` | `BinaryFormatter.Deserialize` |
+| SSTI | 1336 | Freemarker `new Template` | `ejs.render` | `render_template_string` | RazorEngine `RunCompile` |
 
-2. **XSS**  
-   `app.py:search()` → `q` → `templates.py:render_search_results()` → HTML string concatenation
+### Category B — non-sink (Joern entrypoint → forward analysis)
 
-3. **OS command injection**  
-   `app.py:ping()` → `host` → `exec_utils.py:run_ping()` → `os.system(...)`
+| Type | CWE | Demonstration |
+|------|-----|---------------|
+| IDOR | 639 | `GET /users/{id}` with no ownership check |
+| Business Logic Bypass | 840 | Negative transfer amounts; unlimited coupon reuse |
+| Race Condition (TOCTOU) | 367 | Check-then-act on a balance with no lock |
+| Privilege Escalation | 269 | Profile update persists a `role` field |
+| Mass Assignment | 915 | Whole request body bound/merged onto the entity |
+| Broken Access Control | 862 | Admin endpoints with no authorization at all |
+| Authentication Flaws | 287 | Hardcoded weak JWT secret; predictable reset token |
 
-4. **SSRF**  
-   `app.py:fetch()` → `url` → `http_utils.py:fetch_url()` → `requests.get(...)`
+### Difficulty mix (category A)
 
-5. **Broken access control + SQL injection**  
-   `app.py:admin_delete()` → token verification bypass → `db.py:delete_user_unsafe()`
+- **shallow** — sink inside the entrypoint handler itself.
+- **medium** — entrypoint → service → data/util (2-3 files).
+- **deep** — 3+ file chain with taint passed through an instance/module
+  *field* (SQLi, command injection; field-sensitive analysis required).
 
-## Running the application
+### Negative samples (5 per project)
+
+Look-alike but safe code near the real vulnerabilities, for measuring false
+positives: parameterized query, ownership-checked endpoint, DTD-disabled XML
+parser, allow-listed file download, lock-protected withdrawal. Marked
+`"expected": "safe"` in the ground truth.
+
+## Ground truth format
+
+`ground_truth.json` is a JSON array; see any project for examples. Vulnerable
+entries carry `id`, `category` (A/B), `vuln_type`, `cwe`, `expected:
+"vulnerable"`, `difficulty`, `entrypoint {route,file,function}`, `sink`
+(A only), `chain` (ordered files) and `notes`. Safe entries set
+`expected: "safe"` and omit `sink`/`chain`/`difficulty`.
+
+## Quick start
 
 ```bash
-uv sync
-uv run bad-demo
+# Semgrep (per target)
+semgrep --config=auto targets/python-flask
+semgrep --config=auto --json --output=semgrep_py.json targets/python-flask
+
+# Joern: build a CPG per target (binaries are gitignored)
+joern-parse targets/python-flask --output py_cpg.bin
+joern-parse targets/java-spring --output java_cpg.bin
+joern-parse targets/js-ts-express --output js_cpg.bin
+joern-parse targets/csharp-aspnet --output cs_cpg.bin
+
+# then explore, e.g.
+joern --script your_script.sc   # with the CPG imported
 ```
 
-The application listens on `http://0.0.0.0:5000`.
+## Analysis helpers (ready-made Semgrep → Joern workflow)
 
-## Part 1 - SAST scanning with Semgrep
-
-Run Semgrep against the source tree. The `--config=auto` flag uses Semgrep's
-built-in ruleset and produces findings in JSON:
+The `analysis/` and `scripts/` directories implement the two-step pipeline:
 
 ```bash
-semgrep --config=auto --json --output=semgrep_results.json src/bad_demo
+# 0. One-time: build the CPG for a target
+joern-parse targets/python-flask --output py_cpg.bin
+
+# 1a. Semgrep: find sinks with the bundled per-language rules, save to JSON
+semgrep --config analysis/rules/sinks-python.yml --json -o /tmp/raw_py.json targets/python-flask
+
+# 1b. Convert to the compact sink list the Joern script understands
+python3 scripts/semgrep_to_sinks.py /tmp/raw_py.json --root targets/python-flask -o /tmp/sinks_py.json
+
+# 2. Joern backward trace: sink -> caller -> ... -> entrypoint
+SINKS_FILE=/tmp/sinks_py.json joern --script analysis/joern/backward_from_sinks.sc py_cpg.bin
+#    (omit SINKS_FILE to enumerate sinks from the CPG's built-in name table instead)
+
+# 3a. Joern entrypoint enumeration (JSON lines; works for all 4 languages)
+joern --script analysis/joern/find_entrypoints.sc py_cpg.bin
+
+# 3b. Joern forward trace: entrypoint -> callee -> ... -> leaves, sinks marked
+joern --script analysis/joern/forward_from_entrypoints.sc py_cpg.bin
+
+# 4. Extract source snippets for every sink chain (JSON lines, LLM-ready)
+SINKS_FILE=/tmp/sinks_py.json joern --script analysis/joern/extract_chain_snippets.sc py_cpg.bin > /tmp/snippets_py.jsonl
+
+# 5. Dataflow confirmation: does request input actually reach each sink argument?
+SINKS_FILE=/tmp/sinks_py.json joern --script analysis/joern/taint_confirm.sc py_cpg.bin > /tmp/taint_py.jsonl
 ```
 
-You can also try a quick text summary:
+Files:
 
-```bash
-semgrep --config=auto src/bad_demo
-```
+| Path | Purpose |
+| ---- | ------- |
+| `analysis/rules/sinks-{python,java,js,csharp}.yml` | Semgrep sink rules, 8 category-A classes per language |
+| `scripts/semgrep_to_sinks.py` | Semgrep JSON → compact sink list (`file`/`line`/`rule`/`vuln_type`) |
+| `analysis/joern/find_entrypoints.sc` | Entrypoint enumeration (Flask routes, Spring mappings, Express router calls, ASP.NET attributes) |
+| `analysis/joern/backward_from_sinks.sc` | Reverse call-chain walk from each sink to an entrypoint |
+| `analysis/joern/forward_from_entrypoints.sc` | Forward call-graph walk from each entrypoint, sinks marked |
+| `analysis/joern/extract_chain_snippets.sc` | Dumps source code of every method on each sink→entrypoint chain (JSON lines; set `SRC_ROOT` to the parse root when the frontend leaves method `code` empty) |
+| `analysis/joern/taint_confirm.sc` | Dataflow confirmation: `sink.argument.reachableByFlows(request.* sources)` per Semgrep sink; JSON lines with `CONFIRMED`/`UNCONFIRMED` + flow paths |
 
-Expected output: ~20+ findings covering SQLi, command injection, hardcoded
-secrets, weak crypto, unsafe deserialization, SSRF, and more.
+The same commands work for the other targets — swap the rules file
+(`sinks-java.yml`, `sinks-js.yml`, `sinks-csharp.yml`) and the CPG.
 
-## Part 2 - Graph-based taint analysis with Joern
+## Notes
 
-All Joern scripts live in `joern/` and assume you run them from the repository
-root so that relative paths such as `bad_demo_cpg.bin` and `src/bad_demo/...`
-resolve correctly.
-
-### 1. Build the CPG
-
-```bash
-joern-parse src/bad_demo --output bad_demo_cpg.bin
-```
-
-This creates `bad_demo_cpg.bin` in the project root (it is gitignored).
-
-### 2. Run the tutorial scripts
-
-The scripts are designed to be run in order. Each one prints its results
-straight to the terminal.
-
-```bash
-# 1. Inspect the graph: node/edge counts, files, methods, dangerous calls
-joern --script joern/cpg_overview.sc
-
-# 2. Enumerate sinks by category (SQLi, command injection, deserialization, ...)
-joern --script joern/find_sinks.sc
-
-# 3. For each SQL execute sink, check which parameters reach it and who calls it
-joern --script joern/investigate_sinks.sc
-
-# 4. Trace taint from source to sink for SQLi and command injection
-joern --script joern/trace_taint.sc
-
-# 5. Detailed sink-to-source walkthrough with code snippets
-joern --script joern/sink_walkthrough.sc
-
-# 6. Map Semgrep findings to their enclosing CPG functions
-semgrep --config=auto --json --output=semgrep_results.json src/bad_demo
-joern --script joern/joern_map_semgrep.sc
-```
-
-### Script reference
-
-| Script | Purpose |
-| ------ | ------- |
-| `joern/cpg_overview.sc` | Graph stats, source files, method names, first dangerous calls |
-| `joern/find_sinks.sc` | Enumerate sinks grouped by vulnerability class |
-| `joern/investigate_sinks.sc` | Parameter reachability + caller analysis for SQL sinks |
-| `joern/trace_taint.sc` | Step-by-step taint from HTTP source to SQL / command sinks |
-| `joern/sink_walkthrough.sc` | Full sink-to-source walkthrough with printed code snippets |
-| `joern/joern_map_semgrep.sc` | Bridge Semgrep JSON results into CPG function IDs |
-
-## Part 3 - Bridging Semgrep and Joern with Python
-
-Semgrep reports sinks as file/line pairs. For function-level prioritization you
-often want the enclosing function. The helper script uses Python's `ast` module
-to map each Semgrep result to its enclosing function:
-
-```bash
-semgrep --config=auto --json --output=semgrep_results.json src/bad_demo
-python scripts/map_semgrep_to_functions.py semgrep_results.json
-```
-
-You can also produce the same function mapping from the CPG by running
-`joern/joern_map_semgrep.sc` after generating the Semgrep results.
-
-## License
-
-This is educational demo code and is provided as-is without warranty.
+- Joern's C# frontend (csharpsrc2cpg) is less mature; expect coarser CPGs for
+  `csharp-aspnet` (attribute routing / model binding only partially modeled).
+- `js-ts-express` mixes `.js` and `.ts`; filter by extension for per-language
+  scoring.
+- Dataflow confirmation (`taint_confirm.sc`) verified results per language:
+  - **python**: 12/12 Semgrep sinks CONFIRMED, incl. both field-passing deep
+    chains; hardcoded-SQL fake chain correctly excluded.
+  - **java**: 10/11 CONFIRMED via `@RequestParam`/`@RequestBody` parameter
+    sources; `java-ssti-01` missed (Semgrep line hint points at the
+    `new Configuration(...)` line, one off from the tainted `new Template`).
+  - **js/ts**: most sinks CONFIRMED with route-attributed sources; the
+    module-level field chain (`js-sqli-02`, `pendingName`) is NOT tracked by
+    OSS dataflow across files — instance-field chains (java/python/csharp)
+    are tracked, module-scope variables are not.
+  - **csharp**: in-controller sinks CONFIRMED (controller action params as
+    sources); cross-file flows into `Services/` are lost (frontend
+    limitation), so `cs-cmdi-02`, `cs-path-traversal-01` stay UNCONFIRMED.
