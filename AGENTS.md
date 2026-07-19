@@ -28,6 +28,12 @@ to benchmark an LLM + Semgrep + Joern SAST pipeline.
   backward trace, entrypoint→down forward trace, chain source-snippet
   extraction (`extract_chain_snippets.sc`; set `SRC_ROOT` to the parse root),
   dataflow taint confirmation (`taint_confirm.sc`).
+- `analysis/LIMITATIONS.md` — known gaps (source coverage, dataflow-engine
+  limits, pipeline issues) and the not-yet-implemented ideas backlog. Read
+  this first when resuming analysis work in a new session.
+- `PROGRESS.md` / `DECISIONS.md` (repo root) — pipeline status/next
+  steps, and the optimization decisions (do-now / do-later / deferred) taken
+  against those limitations.
 - `scripts/semgrep_to_sinks.py` — converts Semgrep JSON into the sink list
   consumed by `backward_from_sinks.sc` (via `SINKS_FILE`).
 
