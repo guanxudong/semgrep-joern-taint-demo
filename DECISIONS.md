@@ -4,18 +4,31 @@ Optimization decisions for the taint-confirmation pipeline, derived from
 `analysis/LIMITATIONS.md` (2026-07). Ordered by cost/benefit; each entry
 states the decision and the rationale. See `PROGRESS.md` for execution order.
 
-## Do now (small change, direct recall gain)
+## Do now (small change, direct recall gain) — all implemented 2026-07
 
-### D1. Add Flask path parameters as taint sources
+### D1. Add route-parameter taint sources (implemented, broadened)
 
 Gap: `GET /users/<int:user_id>` binds input to the handler argument, never
 touching `request.*`; flows from `get_user` / `delete_user` are missed.
 
-Decision: in `find_entrypoints.sc`, treat parameters of handlers whose route
+Decision: in `taint_confirm.sc`, treat parameters of handlers whose route
 contains `<...>` as sources — mirrors the existing Spring `@PathVariable`
 handling. Single-script change.
 
-### D2. Match sinks by name first, not nearest line
+Implemented broader than the original Flask-only scope, per-language in
+`taint_confirm.sc`'s `sources`:
+
+- python: handler params of routes with `<...>` (Flask) or `{...}` (FastAPI)
+  placeholders; `request.get_json`/`view_args` accessor calls. Django URLconf
+  path params remain invisible (not decorator-based) — still a gap.
+- java: Spring `@RequestParam/@RequestBody/@RequestHeader/@PathVariable` plus
+  `@ModelAttribute/@RequestPart` and JAX-RS `@PathParam/@QueryParam/@FormParam/
+  @HeaderParam/@BeanParam`; `getPathInfo`/`getCookies` accessor calls.
+- js: Express `req.*`, Koa `ctx.*`/`ctx.request.*`, Fastify/Hapi `request.*`.
+- csharp: `Request.*` accessors + all controller action params + params of any
+  `[HttpGet]`-annotated action (covers minimal APIs).
+
+### D2. Match sinks by name first, not nearest line (implemented)
 
 Gap: Semgrep line-hint off-by-one (`java-ssti-01`): the ±1-line tolerance
 picked `new Configuration(...)` instead of the tainted `new Template(...)`
@@ -26,7 +39,17 @@ hint, filter candidate calls by sink *name* first and pick the nearest
 matching one; fall back to nearest-line only when no name matches in the
 window.
 
-### D3. Chain-level confirmation report
+Implemented in both `taint_confirm.sc` and `backward_from_sinks.sc`
+(identical matching): ±3 window; name match ranked name < methodFullName
+(simple name, `:signature` suffix stripped) < `new X(...)` code, so
+constructor sinks (`<init>` calls) match by type name and an assignment
+operator whose code mentions `new X` never beats the real constructor call.
+The per-language sink name tables were aligned with `analysis/rules/`
+(added e.g. `Template`, `FileInputStream`, `parse`, `send_file`,
+`XMLParser`, `spawnSync`, `createReadStream`, `deserialize`) and synced
+across all three Joern scripts.
+
+### D3. Chain-level confirmation report (implemented)
 
 Gap: confirmation is reported per sink, but the LLM layer judges per
 entrypoint->sink chain.
@@ -35,7 +58,14 @@ Decision: join `backward_from_sinks.sc` chains with `taint_confirm.sc` flows
 on (route, sink) and emit CONFIRMED/UNCONFIRMED per chain. Pure
 post-processing of existing outputs.
 
-### D4. Dedup flows by (entrypoint x sink), cap per entry
+Implemented: `backward_from_sinks.sc` gained a machine-readable JSONL side
+output (`CHAINS_JSON=<path>`), new `scripts/chain_report.py` joins it with
+the taint JSONL on (sink file+line) and attributes flows to chains by
+entrypoint fullName (JS: route label, or nested-lambda prefix of the
+entrypoint). Output: one JSON object per entrypoint->sink chain with
+CONFIRMED / UNCONFIRMED / NO_CHAIN.
+
+### D4. Dedup flows by (entrypoint x sink), cap per entry (implemented)
 
 Gap: signature-based dedup plus a global cap of 5 lets duplicate paths crowd
 out distinct routes (4 admin-DELETE dups filled the list at `db/index.js:13`).
@@ -43,6 +73,10 @@ out distinct routes (4 admin-DELETE dups filled the list at `db/index.js:13`).
 Decision: dedup keyed on (entrypoint, sink); keep at least 1 flow per
 entrypoint; cap at 3 flows per entry instead of 5 per sink. Post-processing
 only, no Joern change.
+
+Implemented in `taint_confirm.sc`'s emission stage (output post-processing,
+no dataflow-query change): signature dedup kept, global `take(5)` replaced
+by a cap of 3 flows per `source_method` (entrypoint).
 
 ## Do later (medium effort)
 

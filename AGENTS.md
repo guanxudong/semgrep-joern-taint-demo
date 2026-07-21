@@ -25,8 +25,9 @@ to benchmark an LLM + Semgrep + Joern SAST pipeline.
 - Each target has `ground_truth.json` + `GROUND_TRUTH.md` (kept in sync).
 - `analysis/rules/` — Semgrep sink rules per language (8 category-A classes).
 - `analysis/joern/` — Joern scripts: entrypoint enumeration, sink→entrypoint
-  backward trace, entrypoint→down forward trace, chain source-snippet
-  extraction (`extract_chain_snippets.sc`; set `SRC_ROOT` to the parse root),
+  backward trace (JSONL side output via `CHAINS_JSON`), entrypoint→down
+  forward trace, chain source-snippet extraction
+  (`extract_chain_snippets.sc`; set `SRC_ROOT` to the parse root),
   dataflow taint confirmation (`taint_confirm.sc`).
 - `analysis/LIMITATIONS.md` — known gaps (source coverage, dataflow-engine
   limits, pipeline issues) and the not-yet-implemented ideas backlog. Read
@@ -36,6 +37,8 @@ to benchmark an LLM + Semgrep + Joern SAST pipeline.
   against those limitations.
 - `scripts/semgrep_to_sinks.py` — converts Semgrep JSON into the sink list
   consumed by `backward_from_sinks.sc` (via `SINKS_FILE`).
+- `scripts/chain_report.py` — joins the `CHAINS_JSON` chains with the
+  `taint_confirm.sc` JSONL into a per-chain CONFIRMED/UNCONFIRMED report.
 
 ## Vulnerability taxonomy
 

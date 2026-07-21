@@ -6,15 +6,21 @@ DFG confirmation) across all four targets. Raw outputs: `/tmp/taint_{py,java,js,
 
 ## 1. Source-coverage gaps (taint sources)
 
-- **Python: Flask path parameters are not sources.** `GET /users/<int:user_id>`
-  binds input to the handler *argument*, never touching `request.*`. Flows from
-  `get_user` / `delete_user` are missed. Fix: add route-handler parameters as
-  sources (mirrors what we already do for Spring `@PathVariable`).
-- **Java: Semgrep line-hint off-by-one cost us `java-ssti-01`.** The finding
-  points at `new Configuration(...)` (RenderController.java:23); the tainted
-  call is `new Template("user-tpl", tpl, cfg)` one line below. The ±1-line
-  sink-matching tolerance picked the wrong call. Consider matching by sink
-  *name* first across a wider line window, not nearest-line.
+- ~~**Python: Flask path parameters are not sources.**~~ **FIXED (D1,
+  2026-07)** — see DECISIONS.md. Route-placeholder handler params
+  (Flask `<...>`, FastAPI `{...}`) are now sources; pysrc2cpg has no
+  decorator annotations, so handlers are resolved as the next `def` after
+  the route call's line. Source coverage was broadened per language at the
+  same time (JAX-RS annotations, Koa/Fastify/Hapi accessors, minimal-API
+  C# actions). Still uncovered: Django URLconf path params, file uploads,
+  websocket/CLI inputs.
+- ~~**Java: Semgrep line-hint off-by-one cost us `java-ssti-01`.**~~
+  **FIXED (D2, 2026-07)** — sink matching is now name-first within a ±3
+  window (constructor-aware); `new Template(...)` is picked correctly.
+  Side effect: config-constructor sinks (`XMLParser(resolve_entities=True)`)
+  now match their own node and report UNCONFIRMED when taint enters via the
+  sibling parse call — the parse call (`fromstring`) CONFIRMS separately, so
+  the vuln is still caught.
 
 ## 2. Dataflow-engine gaps (Joern OSS)
 
@@ -56,9 +62,14 @@ DFG confirmation) across all four targets. Raw outputs: `/tmp/taint_{py,java,js,
   `extract_chain_snippets.sc` slices files from disk via `SRC_ROOT`; CPG
   `lineNumberEnd` overruns slightly and bleeds neighboring comments into
   snippets.
-- **Flow output is capped at 5 per sink** and dedup is by node signature;
+- ~~**Flow output is capped at 5 per sink** and dedup is by node signature;
   duplicate-path noise can crowd out distinct routes (observed on
-  `db/index.js:13` where 4 admin-DELETE dups filled the list).
+  `db/index.js:13` where 4 admin-DELETE dups filled the list).~~ **FIXED
+  (D4, 2026-07)** — dedup by signature + cap of 3 flows per entrypoint;
+  no global per-sink cap anymore.
+- **Sinks with no call chain used to vanish from reports.** `chain_report.py`
+  now emits NO_CHAIN rows for them (observed: 3 cs `Services/` sinks from
+  dropped csharpsrc2cpg CALL edges, 3 js intermediate/indirection sinks).
 
 ## 4. Discussed but not implemented (ideas backlog)
 
@@ -70,9 +81,10 @@ DFG confirmation) across all four targets. Raw outputs: `/tmp/taint_{py,java,js,
   discussion): mostly redundant with `reachableByFlows`, still relevant for
   module-variable fields and as a lightweight mode without the dataflow
   overlay.
-- **Chain-level confirmation report**: join `backward_from_sinks` chains with
-  `taint_confirm` flows to mark each *entrypoint->sink chain* (not just each
-  sink) CONFIRMED/UNCONFIRMED.
+- ~~**Chain-level confirmation report**: join `backward_from_sinks` chains
+  with `taint_confirm` flows to mark each *entrypoint->sink chain* (not just
+  each sink) CONFIRMED/UNCONFIRMED.~~ **DONE (D3, 2026-07)** —
+  `CHAINS_JSON` side output + `scripts/chain_report.py`.
 - **Forward dataflow from sources** to discover taint-driven sinks without
   Semgrep (source -> any sensitive call), complementing sink-first analysis.
 - **Category B (business logic) remains LLM-only**: CFG-based checks for
