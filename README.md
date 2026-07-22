@@ -124,6 +124,18 @@ SINKS_FILE=/tmp/sinks_py.json joern --script analysis/joern/extract_chain_snippe
 
 # 5. Dataflow confirmation: does request input actually reach each sink argument?
 SINKS_FILE=/tmp/sinks_py.json joern --script analysis/joern/taint_confirm.sc py_cpg.bin > /tmp/taint_py.jsonl
+
+# 6. LLM judgment (category A): is each sink->entrypoint chain a real vulnerability?
+#    (DeepSeek via pydantic-ai; needs DEEPSEEK_API_KEY in env or .env)
+uv run scripts/llm_judge_sink_chains.py --snippets /tmp/snippets_py.jsonl \
+    --ground-truth targets/python-flask/ground_truth.json -o /tmp/verdicts_py.jsonl
+
+# 7. Category B (non-sink): extract handler + forward-reachable source per entrypoint
+SRC_ROOT=targets/python-flask joern --script analysis/joern/extract_entrypoint_snippets.sc py_cpg.bin > /tmp/ep_snippets_py.jsonl
+
+# 8. LLM judgment (category B): judge each endpoint against all 7 non-sink classes
+uv run scripts/llm_judge_entrypoints.py --snippets /tmp/ep_snippets_py.jsonl \
+    --ground-truth targets/python-flask/ground_truth.json -o /tmp/verdicts_b_py.jsonl
 ```
 
 Files:
@@ -136,7 +148,10 @@ Files:
 | `analysis/joern/backward_from_sinks.sc` | Reverse call-chain walk from each sink to an entrypoint |
 | `analysis/joern/forward_from_entrypoints.sc` | Forward call-graph walk from each entrypoint, sinks marked |
 | `analysis/joern/extract_chain_snippets.sc` | Dumps source code of every method on each sink→entrypoint chain (JSON lines; set `SRC_ROOT` to the parse root when the frontend leaves method `code` empty) |
+| `analysis/joern/extract_entrypoint_snippets.sc` | Dumps every HTTP entrypoint plus the source of its forward-reachable callees (BFS depth ≤ 5, JSON lines; `SRC_ROOT` as above) — input for the category-B LLM path |
 | `analysis/joern/taint_confirm.sc` | Dataflow confirmation: `sink.argument.reachableByFlows(request.* sources)` per Semgrep sink; JSON lines with `CONFIRMED`/`UNCONFIRMED` + flow paths |
+| `scripts/llm_judge_sink_chains.py` | LLM judgment layer, category A (pydantic-ai + DeepSeek): synthesizes each sink→entrypoint chain's snippets into a prompt, returns a structured verdict, and scores recall/FP against `ground_truth.json` (`--from-verdicts` re-scores without re-calling the LLM) |
+| `scripts/llm_judge_entrypoints.py` | LLM judgment layer, category B (same DeepSeek setup): judges each entrypoint + forward-reachable source against all 7 non-sink classes and scores the category-B ground-truth entries (file+function match, route fallback) |
 
 The same commands work for the other targets — swap the rules file
 (`sinks-java.yml`, `sinks-js.yml`, `sinks-csharp.yml`) and the CPG.

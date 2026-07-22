@@ -12,26 +12,31 @@
 // `snippets` is the de-duplicated union of all methods on all chains for that
 // sink — ready to hand to an LLM for review.
 //
-// Method source comes from the CPG's `code` property when the frontend fills
-// it in; otherwise it is sliced from disk by line range. SRC_ROOT must then
-// point at the directory that was given to joern-parse (default: ".").
+// Method source comes from whichever is LONGER: a disk slice by line
+// range (SRC_ROOT must then point at the directory that was given to
+// joern-parse, default: ".") or the CPG's `code` property — javasrc2cpg
+// fills `code` with only the signature line.
 import io.shiftleft.semanticcpg.language._
 import io.shiftleft.codepropertygraph.generated.nodes.Method
 import java.nio.file.{Files, Paths}
 
 val srcRoot = Paths.get(sys.env.getOrElse("SRC_ROOT", "."))
 
-// read a method's source: CPG code property, falling back to a disk slice
+// read a method's source: prefer a disk slice by line range when it is
+// LONGER than the CPG code property — javasrc2cpg fills `code` with just
+// the signature line, which would hide the whole method body from the LLM
 def methodSource(m: Method): String = {
-  if (m.code != null && m.code.nonEmpty && m.code != "<empty>") return m.code
+  val cpgCode =
+    if (m.code != null && m.code.nonEmpty && m.code != "<empty>") m.code else ""
   (m.file.name.headOption, m.lineNumber, m.lineNumberEnd) match {
-    case (Some(f), Some(start), Some(end)) =>
+    case (Some(f), Some(start), Some(end)) if end > start =>
       try {
         val lines = Files.readAllLines(srcRoot.resolve(f))
-        lines.subList(math.max(start - 1, 0), math.min(end, lines.size))
+        val sliced = lines.subList(math.max(start - 1, 0), math.min(end, lines.size))
           .toArray.mkString("\n")
-      } catch { case _: Exception => "" }
-    case _ => ""
+        if (sliced.length > cpgCode.length) sliced else cpgCode
+      } catch { case _: Exception => cpgCode }
+    case _ => cpgCode
   }
 }
 
@@ -72,6 +77,77 @@ val entrypoints: Map[String, String] = lang match {
       }
     }.toMap
 }
+
+// ---- JS ghost-callee repair (D5) — see backward_from_sinks.sc ----
+def resolveModule(importerFile: String, entity: String): String = {
+  val parts = importerFile.split("/").toList.dropRight(1) ++
+    entity.split("/").toList.filter(p => p.nonEmpty && p != ".")
+  val out = scala.collection.mutable.ListBuffer.empty[String]
+  parts.foreach {
+    case ".." => if (out.nonEmpty) out.remove(out.size - 1)
+    case p    => out += p
+  }
+  out.mkString("/")
+}
+
+val jsImportMap: Map[String, Map[String, String]] =
+  if (lang != "js") Map.empty
+  else cpg.file.name(".*\\.(js|ts)$").l.flatMap { f =>
+    f.ast.isImport.l.flatMap { i =>
+      for (as <- i.importedAs; ent <- i.importedEntity)
+        yield (f.name, as -> resolveModule(f.name, ent))
+    }
+  }.groupBy(_._1).map { case (f, rows) => f -> rows.map(_._2).toMap }
+
+def fileMatchesModule(file: String, mod: String): Boolean =
+  file == mod + ".js" || file == mod + ".ts" ||
+  file == mod + "/index.js" || file == mod + "/index.ts"
+
+val ghostCallerPairs: List[(String, Method)] =
+  if (lang != "js") List.empty
+  else (for {
+    m  <- cpg.method.where(_.file.name(".+")).l
+    mf <- m.file.name.headOption.toList
+    c  <- cpg.call.nameExact(m.name).where(_.callee.isExternal).l
+    cf <- c.file.name.headOption.toList
+    recv <- ("^([A-Za-z_$][A-Za-z0-9_$]*)\\." + java.util.regex.Pattern.quote(m.name) + "\\b").r
+      .findFirstMatchIn(c.code.trim).map(_.group(1)).toList
+    mod <- jsImportMap.getOrElse(cf, Map.empty).get(recv).toList
+    if fileMatchesModule(mf, mod)
+  } yield m.fullName -> c.method)
+
+val ghostCallersByName: Map[String, List[Method]] =
+  ghostCallerPairs.groupBy(_._1).map { case (k, vs) => k -> vs.map(_._2).distinct }
+    .withDefault(_ => Nil)
+
+// ---- C# missing-inner-call fallback (D7, LOW_CONFIDENCE) ----
+// csharpsrc2cpg drops the call node for `_svc.Method(...)` entirely when it
+// is NESTED inside another call (`Ok(_svc.Method())`) — no CALL edge and no
+// call node, so neither .caller nor name-based call traversal can find it.
+// Fallback: a controller method counts as a caller of service method m when
+// its source text contains ".<mname>(" AND its declaring type has a member
+// whose type is m's declaring type. Scoped to lang == "csharp" (DECISIONS
+// D7); edges found this way are LOW_CONFIDENCE and logged to stderr.
+def methodText(m: Method): String = methodSource(m)
+
+val csTextCallerCache = scala.collection.mutable.Map.empty[String, List[Method]]
+def textCallers(m: Method): List[Method] =
+  if (lang != "csharp") Nil
+  else csTextCallerCache.getOrElseUpdate(m.fullName, {
+    val svcType = m.typeDecl.name.headOption.getOrElse("")
+    if (svcType.isEmpty) Nil
+    else {
+      val pat = ("\\." + java.util.regex.Pattern.quote(m.name) + "\\s*\\(").r
+      cpg.method.where(_.file.name("Controllers/.*\\.cs$")).l.filter { cand =>
+        cand.fullName != m.fullName &&
+        pat.findFirstIn(methodText(cand)).nonEmpty &&
+        cand.typeDecl.member.exists(_.typeFullName.split('.').last == svcType)
+      }.map { cand =>
+        System.err.println(s"// D7 LOW_CONFIDENCE edge: ${cand.fullName} -> ${m.fullName}")
+        cand
+      }
+    }
+  })
 
 // ---- sink calls: (call node, optional semgrep metadata) ----
 val sinkCalls: List[(io.shiftleft.codepropertygraph.generated.nodes.Call, Map[String, String])] =
@@ -114,7 +190,7 @@ def backward(sinkCall: io.shiftleft.codepropertygraph.generated.nodes.Call, maxD
     if (entrypoints.contains(cur.fullName)) {
       results ::= path
     } else if (path.size <= maxDepth) {
-      cur.caller.l.foreach { caller =>
+      (cur.caller.l ++ ghostCallersByName(cur.fullName) ++ textCallers(cur)).foreach { caller =>
         if (!path.exists(_.fullName == caller.fullName)) queue :+= caller :: path
       }
     }

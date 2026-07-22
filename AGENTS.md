@@ -28,7 +28,9 @@ to benchmark an LLM + Semgrep + Joern SAST pipeline.
   backward trace (JSONL side output via `CHAINS_JSON`), entrypoint→down
   forward trace, chain source-snippet extraction
   (`extract_chain_snippets.sc`; set `SRC_ROOT` to the parse root),
-  dataflow taint confirmation (`taint_confirm.sc`).
+  entrypoint+forward-reachable source-snippet extraction
+  (`extract_entrypoint_snippets.sc`), dataflow taint confirmation
+  (`taint_confirm.sc`).
 - `analysis/LIMITATIONS.md` — known gaps (source coverage, dataflow-engine
   limits, pipeline issues) and the not-yet-implemented ideas backlog. Read
   this first when resuming analysis work in a new session.
@@ -39,6 +41,19 @@ to benchmark an LLM + Semgrep + Joern SAST pipeline.
   consumed by `backward_from_sinks.sc` (via `SINKS_FILE`).
 - `scripts/chain_report.py` — joins the `CHAINS_JSON` chains with the
   `taint_confirm.sc` JSONL into a per-chain CONFIRMED/UNCONFIRMED report.
+- `scripts/llm_judge_sink_chains.py` — LLM judgment layer for category A
+  (pydantic-ai + DeepSeek, OpenAI-compatible endpoint; env
+  `DEEPSEEK_API_KEY`/`DEEPSEEK_MODEL`/`DEEPSEEK_BASE_URL`, falls back to
+  `~/Code/agent-demo/.env`). Judges each sink→entrypoint chain from
+  `extract_chain_snippets.sc` output and scores recall / safe-sample FPs
+  against `ground_truth.json`. Run with `uv run` (PEP 723 deps inline);
+  `--from-verdicts` re-scores a saved verdicts JSONL without new LLM calls.
+- `scripts/llm_judge_entrypoints.py` — LLM judgment layer for category B
+  (same DeepSeek setup). Judges each HTTP entrypoint from
+  `extract_entrypoint_snippets.sc` output (handler + forward-reachable
+  callee source) semantically against all 7 non-sink classes, then scores
+  the category-B entries of `ground_truth.json` (matching on file+function,
+  route as fallback). Same CLI shape as `llm_judge_sink_chains.py`.
 
 ## Vulnerability taxonomy
 

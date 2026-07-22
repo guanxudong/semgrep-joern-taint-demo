@@ -91,6 +91,19 @@ to all writes of the same variable and continue from each RHS. Scope it
 strictly to cross-file module variables — do NOT build a general-purpose
 traversal (mostly redundant with `reachableByFlows`).
 
+**RESOLVED (2026-07, chain side):** the NO_CHAIN root cause turned out to be
+in the CALL graph, not the DFG — jssrc2cpg resolves require-imported calls
+(`userService.findStaged(...)`) to GHOST methods in the caller's own file
+(`routes/users.js::program:findStaged`, external=true), leaving the real
+method in the required module with zero incoming CALL edges. Implemented an
+import-binding call-edge repair in `backward_from_sinks.sc` and
+`extract_chain_snippets.sc`: a call site `recv.name(...)` with an external
+callee counts as a caller of the real method `m` when `recv` is an import
+binding (IMPORT nodes) in the call's file whose module path resolves to
+`m`'s file. Scoped to `lang == "js"` as decided. Result: js A recall 9/10 →
+10/10. The module-variable DATAFLOW gap in `taint_confirm.sc` (DFG still
+dies at the module-var store/load) remains open.
+
 ### D6. Attach write sites to chain snippets
 
 Gap: backward chains include `find_staged` / `query_unsafe` but not the
@@ -110,6 +123,28 @@ Decision: fall back to `cpg.call.name("<methodName>")` traversal when
 resolved `.caller` edges are missing. Accept same-name collisions, but mark
 anything confirmed this way LOW_CONFIDENCE rather than CONFIRMED. Do NOT
 tune Semgrep rules to force results — this is a frontend limitation.
+
+**RESOLVED (2026-07, chain side):** the gap was narrower than expected —
+csharpsrc2cpg drops the call NODE entirely when `_svc.Method(...)` is nested
+inside another call (`Ok(_svc.Method())`), so even name-based call
+traversal finds nothing. Implemented a source-text fallback in
+`backward_from_sinks.sc` / `extract_chain_snippets.sc`: a controller method
+counts as a caller of service method `m` when (a) its source text contains
+`".<mname>("` and (b) its declaring type has a field/property of `m`'s
+declaring type. Edges are logged as `D7 LOW_CONFIDENCE` on stderr. 10 edges
+synthesized, all verified semantically correct (including safe variants
+mapping to safe methods only). Result: csharp A recall 8/10 → 10/10. The
+`taint_confirm.sc` dataflow side (cross-file flows still UNCONFIRMED)
+remains open.
+
+Update (2026-07): the same nested-call gap bites the FORWARD direction —
+`extract_entrypoint_snippets.sc` (category-B path) missed
+`_orderService.Transfer(...)` inside `Ok(...)`, starving the LLM of the
+service bodies (found when the ground-truth label leak was fixed and cs B
+honestly dropped to 5/7). Added the mirror-image fallback: a Services/Data
+method counts as a callee of a controller method when the controller's
+source contains `".<name>("` and holds a field of the callee's declaring
+type. cs B back to 7/7 without label leakage.
 
 ## Decided against / deferred
 

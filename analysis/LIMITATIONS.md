@@ -31,11 +31,22 @@ DFG confirmation) across all four targets. Raw outputs: `/tmp/taint_{py,java,js,
   store/load across files. Candidate fixes: Jump-on-Field for module variables
   (backward DFG hits a module-var read -> jump to all writes of the same var ->
   continue from RHS), or LLM fallback.
+  Update (2026-07): the CALL-CHAIN side of this case is fixed — the NO_CHAIN
+  was caused by jssrc2cpg ghost callees for require-imported calls, repaired
+  via import-binding edge synthesis in the two backward scripts (see
+  DECISIONS.md D5). This bullet now concerns only `taint_confirm.sc`
+  dataflow confirmation, which is still open.
 - **C# cross-file flows are lost.** In-controller sinks CONFIRM; anything
   crossing into `Services/` (`cs-cmdi-02`, `cs-path-traversal-01`, plus
   `cs-xss-01`/`cs-ssti-01` line noise) stays UNCONFIRMED. This is a
   csharpsrc2cpg frontend limitation, not a rule problem — do not "fix" rules
   to force results.
+  Update (2026-07): the CALL-CHAIN side is fixed — the root cause was call
+  NODES dropped for `_svc.Method()` nested inside `Ok(...)`; repaired with
+  a source-text + field-type fallback in the two backward scripts and in
+  `extract_entrypoint_snippets.sc` (forward direction; see DECISIONS.md
+  D7), taking cs A recall to 10/10. This bullet now concerns only
+  `taint_confirm.sc` dataflow confirmation, which is still open.
 
 ## 3. Pipeline/structural limitations
 

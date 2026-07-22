@@ -19,6 +19,26 @@ import io.shiftleft.semanticcpg.language._
 import io.shiftleft.codepropertygraph.generated.nodes.Method
 import java.nio.file.{Files, Paths}
 
+val srcRoot = Paths.get(sys.env.getOrElse("SRC_ROOT", "."))
+
+// read a method's source: prefer a disk slice by line range when it is
+// LONGER than the CPG code property (javasrc2cpg/csharpsrc2cpg may fill
+// `code` with just the signature line). Used by the D7 text fallback.
+def methodSource(m: Method): String = {
+  val cpgCode =
+    if (m.code != null && m.code.nonEmpty && m.code != "<empty>") m.code else ""
+  (m.file.name.headOption, m.lineNumber, m.lineNumberEnd) match {
+    case (Some(f), Some(start), Some(end)) if end > start =>
+      try {
+        val lines = Files.readAllLines(srcRoot.resolve(f))
+        val sliced = lines.subList(math.max(start - 1, 0), math.min(end, lines.size))
+          .toArray.mkString("\n")
+        if (sliced.length > cpgCode.length) sliced else cpgCode
+      } catch { case _: Exception => cpgCode }
+    case _ => cpgCode
+  }
+}
+
 // Sink name table, aligned with analysis/rules/sinks-*.yml (keep in sync with
 // taint_confirm.sc / forward_from_entrypoints.sc). Must also cover constructor
 // sinks (`new Template`, `new FileInputStream`) for name-first matching.
@@ -59,6 +79,78 @@ val entrypoints: Map[String, String] = lang match {
       }
     }.toMap
 }
+
+// ---- JS ghost-callee repair (D5) ----
+// jssrc2cpg resolves `userService.findStaged(...)` (require-based import) to
+// a GHOST method in the CALLER's own file (external=true), so the real
+// method in the required module has no incoming CALL edges and backward()
+// dies there. Repair: a call site `recv.name(...)` counts as a caller of m
+// when the call's callee is external, the call name equals m.name, and
+// `recv` is an import binding in the call's file whose module path resolves
+// to m's file. Scoped to lang == "js" per DECISIONS.md (D5).
+def resolveModule(importerFile: String, entity: String): String = {
+  val parts = importerFile.split("/").toList.dropRight(1) ++
+    entity.split("/").toList.filter(p => p.nonEmpty && p != ".")
+  val out = scala.collection.mutable.ListBuffer.empty[String]
+  parts.foreach {
+    case ".." => if (out.nonEmpty) out.remove(out.size - 1)
+    case p    => out += p
+  }
+  out.mkString("/")
+}
+
+val jsImportMap: Map[String, Map[String, String]] =
+  if (lang != "js") Map.empty
+  else cpg.file.name(".*\\.(js|ts)$").l.flatMap { f =>
+    f.ast.isImport.l.flatMap { i =>
+      for (as <- i.importedAs; ent <- i.importedEntity)
+        yield (f.name, as -> resolveModule(f.name, ent))
+    }
+  }.groupBy(_._1).map { case (f, rows) => f -> rows.map(_._2).toMap }
+
+def fileMatchesModule(file: String, mod: String): Boolean =
+  file == mod + ".js" || file == mod + ".ts" ||
+  file == mod + "/index.js" || file == mod + "/index.ts"
+
+val ghostCallerPairs: List[(String, Method)] =
+  if (lang != "js") List.empty
+  else (for {
+    m  <- cpg.method.where(_.file.name(".+")).l
+    mf <- m.file.name.headOption.toList
+    c  <- cpg.call.nameExact(m.name).where(_.callee.isExternal).l
+    cf <- c.file.name.headOption.toList
+    recv <- ("^([A-Za-z_$][A-Za-z0-9_$]*)\\." + java.util.regex.Pattern.quote(m.name) + "\\b").r
+      .findFirstMatchIn(c.code.trim).map(_.group(1)).toList
+    mod <- jsImportMap.getOrElse(cf, Map.empty).get(recv).toList
+    if fileMatchesModule(mf, mod)
+  } yield m.fullName -> c.method)
+
+val ghostCallersByName: Map[String, List[Method]] =
+  ghostCallerPairs.groupBy(_._1).map { case (k, vs) => k -> vs.map(_._2).distinct }
+    .withDefault(_ => Nil)
+
+// ---- C# missing-inner-call fallback (D7, LOW_CONFIDENCE) — see
+// extract_chain_snippets.sc for the full explanation ----
+def methodText(m: Method): String = methodSource(m)
+
+val csTextCallerCache = scala.collection.mutable.Map.empty[String, List[Method]]
+def textCallers(m: Method): List[Method] =
+  if (lang != "csharp") Nil
+  else csTextCallerCache.getOrElseUpdate(m.fullName, {
+    val svcType = m.typeDecl.name.headOption.getOrElse("")
+    if (svcType.isEmpty) Nil
+    else {
+      val pat = ("\\." + java.util.regex.Pattern.quote(m.name) + "\\s*\\(").r
+      cpg.method.where(_.file.name("Controllers/.*\\.cs$")).l.filter { cand =>
+        cand.fullName != m.fullName &&
+        pat.findFirstIn(methodText(cand)).nonEmpty &&
+        cand.typeDecl.member.exists(_.typeFullName.split('.').last == svcType)
+      }.map { cand =>
+        System.err.println(s"// D7 LOW_CONFIDENCE edge: ${cand.fullName} -> ${m.fullName}")
+        cand
+      }
+    }
+  })
 
 // ---- sink calls: from SINKS_FILE if given, else by name table ----
 // sink-name match: direct call name, or constructor sinks by type name
@@ -121,7 +213,7 @@ def backward(sinkCall: io.shiftleft.codepropertygraph.generated.nodes.Call, maxD
     if (entrypoints.contains(cur.fullName)) {
       results ::= path
     } else if (path.size <= maxDepth) {
-      cur.caller.l.foreach { caller =>
+      (cur.caller.l ++ ghostCallersByName(cur.fullName) ++ textCallers(cur)).foreach { caller =>
         if (!path.exists(_.fullName == caller.fullName)) queue :+= caller :: path
       }
     }
