@@ -107,6 +107,24 @@ clean). Both judge scripts now strip marker lines in `build_prompt`
 - Final clean totals: **A 40/40, B 28/28**; FPs py-safe-03, js-safe-03
   (XXE prompt), js-safe-05 (spinlock strictness).
 
+## Repo map (2026-07, built & compared)
+
+LLM-consumable repository maps (directory tree + roles, HTTP route table,
+per-file symbol index, file-level reference graph), same JSON schema from
+two implementations, cross-checked against `ground_truth.json` with
+`scripts/compare_repo_maps.py` (details: `analysis/repo_map_compare.md`):
+
+- `scripts/repo_map.py` (tree-sitter, `uv run`, zero prerequisites,
+  ~0.1 s/target) — **the default**. Route hits 22/22 on all four targets;
+  function hits 22/22 except js 19/22 (3 misses are ground-truth logical
+  names for anonymous arrow handlers — unrecoverable ceiling).
+- `analysis/joern/repo_map.sc` (CPG-derived; needs an existing CPG, ~5 s
+  JVM overhead) — equal route accuracy but sparser reference edges
+  (call-based vs import-based; cs 5 vs 10). Kept as an enrichment source
+  when a CPG already exists, not as a standalone mapper.
+- Anonymous js/ts handlers get stable path-derived names (`/users/search` →
+  `search`) in both implementations.
+
 ## Category-B forward-analysis path (2026-07, built)
 
 `analysis/joern/extract_entrypoint_snippets.sc` dumps every HTTP entrypoint

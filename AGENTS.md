@@ -30,7 +30,9 @@ to benchmark an LLM + Semgrep + Joern SAST pipeline.
   (`extract_chain_snippets.sc`; set `SRC_ROOT` to the parse root),
   entrypoint+forward-reachable source-snippet extraction
   (`extract_entrypoint_snippets.sc`), dataflow taint confirmation
-  (`taint_confirm.sc`).
+  (`taint_confirm.sc`), CPG-derived repo map (`repo_map.sc`; prints one JSON
+  object on stdout — joern logs go to stdout too, so pipe through
+  `awk '/^\{$/,/^\}$/'`).
 - `analysis/LIMITATIONS.md` — known gaps (source coverage, dataflow-engine
   limits, pipeline issues) and the not-yet-implemented ideas backlog. Read
   this first when resuming analysis work in a new session.
@@ -54,6 +56,16 @@ to benchmark an LLM + Semgrep + Joern SAST pipeline.
   callee source) semantically against all 7 non-sink classes, then scores
   the category-B entries of `ground_truth.json` (matching on file+function,
   route as fallback). Same CLI shape as `llm_judge_sink_chains.py`.
+- `scripts/repo_map.py` — repo-map generator (tree-sitter, `uv run`, PEP
+  723 deps inline; Java/JS/TS/Python/C#). Emits an LLM-consumable Markdown
+  map (directory tree + roles, HTTP route table for Flask/Express/Spring/
+  ASP.NET, per-file symbols, import-level reference graph) plus a JSON twin.
+  `--check ground_truth.json` cross-checks extracted routes/functions.
+  This is the default mapper for unknown repos (zero prerequisites); see
+  `analysis/repo_map_compare.md` for the tree-sitter vs Joern comparison.
+- `scripts/compare_repo_maps.py` — scores one or more repo-map JSONs
+  (tree-sitter or joern schema) against a `ground_truth.json`: route and
+  function hit rates plus coverage stats.
 
 ## Vulnerability taxonomy
 
