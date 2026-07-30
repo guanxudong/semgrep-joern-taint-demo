@@ -127,6 +127,13 @@ def simple_name(full_name: str) -> str:
     return base.rsplit(".", 1)[-1] or full_name
 
 
+def cpg_file(path: str) -> str:
+    """Map a CPG-side file back to its ground-truth name: the transpiled JSP
+    tree (scripts/jsp_to_java.py) names pages X_jsp.java where the ground
+    truth has the original pages/X.jsp."""
+    return re.sub(r"_jsp\.java$", ".jsp", path)
+
+
 def load_jsonl(path: str) -> list[dict]:
     rows = []
     with open(path) as f:
@@ -251,7 +258,7 @@ def entrypoint_matches_entry(record: dict, entry: dict) -> int:
     gt_ep = entry.get("entrypoint", {})
     ep = record.get("entrypoint", {})
     gt_file = gt_ep.get("file", "")
-    file_ok = bool(gt_file) and ep.get("file", "").endswith(gt_file)
+    file_ok = bool(gt_file) and cpg_file(ep.get("file", "")).endswith(gt_file)
     gt_fn = gt_ep.get("function", "")
     if gt_fn and file_ok and simple_name(ep.get("method", "")) == gt_fn:
         return 1000

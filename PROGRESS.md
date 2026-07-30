@@ -6,6 +6,14 @@ decided to do about them).
 
 ## Done and validated
 
+- `targets/jsp-legacy/` + `scripts/jsp_to_java.py` (2026-07, D8): new
+  scriptlet-JSP target mirroring the java-spring taxonomy one-for-one
+  (20 entries, `jsp-` ids) plus a line-preserving JSP→Java transpiler.
+  Validated: transpiler output parses with javasrc2cpg and Semgrep runs
+  clean on it, hitting 9/10 category-A sinks (all but jsp-xss-01, whose
+  `out.print` shape the return-based xss rule cannot match — see
+  `targets/jsp-legacy/GROUND_TRUTH.md`). Wired end-to-end by D9 (below).
+
 - `analysis/joern/taint_confirm.sc` built and validated across all four
   targets: Semgrep sink -> call-graph backward trace -> DFG confirmation.
   Raw outputs: `/tmp/taint_{py,java,js,cs}.jsonl`.
@@ -36,6 +44,34 @@ decided to do about them).
     Validated: `db/index.js:13` keeps the DELETE `/users/:id` chain
     CONFIRMED while the static-SQL GET `/users` chain is correctly
     UNCONFIRMED instead of crowded out.
+
+## JSP pipeline wiring (2026-07, D9 — validated end-to-end)
+
+The java pipeline now runs on the transpiled JSP tree with three small
+additions (details in DECISIONS.md D9): the `out.print(...)` xss sink
+pattern (+ `print` in the java sink-name tables), `_jspService` entrypoint
+detection in all five joern scripts (route by filename convention,
+`pages/X_jsp.java` → `"/X.jsp"`), and `X_jsp.java`→`X.jsp` file
+normalization in both LLM judges. Full run on `workspace/jsp-java`:
+
+- Semgrep: 16 sink findings, all 10 category-A vuln sinks covered
+  (jsp-xss-01 now hits; the 6 extras are HTML-concat `out.print` calls in
+  other pages plus the two safe XXE/path-traversal lookalikes — same
+  shape-based noise profile as the other targets).
+- Chain report: 32 chains, **29 CONFIRMED / 3 UNCONFIRMED / 0 NO_CHAIN**.
+  The deep field-based chains (jsp-sqli-02 via `UserService.pendingName`,
+  jsp-cmdi-02 via `ToolService.target`) CONFIRM like java-spring's. The 3
+  UNCONFIRMED are genuinely untainted (static-SQL admin listing, DB-output
+  print) — correct negatives.
+- `taint_confirm.sc` unchanged: 15/16 sinks CONFIRMED.
+- LLM judges (deepseek-v4-flash): **category A 10/10, category B 7/7,
+  safe samples 5/5 correctly rejected (0 FPs), 0 LLM errors.**
+- No ground-truth label leak: the transpiler drops `<%-- VULN --%>`
+  comments and javasrc2cpg method slices exclude the `// VULN:` lines in
+  the copied helpers (verified on the extracted snippets, 0 leaks).
+- Regression: semgrep output on `targets/java-spring` byte-identical
+  before/after the xss rule change; entrypoint detection on the four
+  existing CPGs gains zero JSP entries (none have `*_jsp.java` files).
 
 ## Known gaps (details in LIMITATIONS.md)
 

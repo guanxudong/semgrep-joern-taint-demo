@@ -4,6 +4,55 @@ Optimization decisions for the taint-confirmation pipeline, derived from
 `analysis/LIMITATIONS.md` (2026-07). Ordered by cost/benefit; each entry
 states the decision and the rationale. See `PROGRESS.md` for execution order.
 
+## Target coverage (2026-07)
+
+### D8. JSP support via transpile-to-Java
+
+Gap: legacy JSP applications are outside the pipeline — neither Semgrep nor
+Joern has a JSP frontend (confirmed on joern 4.0.566: no JSP frontend
+exists), so a scriptlet-style JSP target could not be benchmarked at all.
+
+Decision: transpile, don't extend. `scripts/jsp_to_java.py` (stdlib only,
+deterministic) converts `targets/jsp-legacy/pages/*.jsp` into plain-Java
+servlet-style classes (Jasper-style `_jspService` methods) under the
+gitignored `workspace/jsp-java/`, and the ENTIRE java pipeline
+(`analysis/rules/sinks-java.yml`, javasrc2cpg via joern-parse, the joern
+.sc scripts) runs on the generated tree unchanged. Chosen over Semgrep
+generic-mode pattern matching (no dataflow, no call graph — would only
+exercise half the pipeline) and over waiting for a Joern JSP frontend
+(not on any roadmap we can see). Rationale: full reuse of the java rules
+and joern scripts with zero pipeline changes; the transpilation is
+line-preserving and records a per-file offset in
+`workspace/jsp-java/manifest.json`, so findings map back to exact JSP
+lines. Known cost: the return-based java xss sink rule did not match
+`out.print(...)` — resolved by D9.
+
+### D9. JSP pipeline wiring (out.print sink, _jspService entrypoints)
+
+Gap: D8's generated tree parses and scans, but three pipeline pieces were
+still Spring-shaped: the xss rule only matched `return <html> + x`, the
+joern scripts only recognized `@*Mapping` entrypoints, and the LLM judges
+matched ground truth on CPG file names (`pages/X_jsp.java` vs `X.jsp`).
+
+Decision: minimal unions, no forks. (1) `java-sink-xss` gained an
+`out.print(<... $HTML + $X ...>)` alternative under the SAME HTML
+metavariable guard, and `print` joined the java sink-name tables (the CPG
+call name of `out.print` is `print`); java-spring semgrep output is
+byte-identical before/after. (2) All five joern scripts union JSP
+entrypoints `cpg.method.nameExact("_jspService")` in `pages/*_jsp.java`
+into the java case — a pure union, inert for the other targets (no
+`*_jsp.java` files there) — with the route label derived by filename
+convention (`pages/X_jsp.java` → `"/X.jsp"`, quoted so the judge's
+route-suffix matching keeps working). Chosen over reading
+`workspace/jsp-java/manifest.json` in the scripts: the convention is
+equivalent and adds no env vars. (3) Both LLM judges normalize
+`X_jsp.java` → `X.jsp` when comparing files, and the sink judge treats
+`_jspService` as non-discriminating (every page shares it) by requiring
+the route label to match too — otherwise any judged sqli chain would
+match the safe sqli sample. `taint_confirm.sc` needed no change:
+`request.getParameter` was already a java source and flow attribution is
+file/line-range based. Result: A 10/10, B 7/7, 0 safe FPs (PROGRESS.md).
+
 ## Do now (small change, direct recall gain) — all implemented 2026-07
 
 ### D1. Add route-parameter taint sources (implemented, broadened)

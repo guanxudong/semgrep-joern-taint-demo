@@ -22,6 +22,8 @@ to benchmark an LLM + Semgrep + Joern SAST pipeline.
 - `targets/js-ts-express/` — Express, mixed .js/.ts (source only)
 - `targets/python-flask/` — Flask blueprints (source only)
 - `targets/csharp-aspnet/` — ASP.NET Core style (source only)
+- `targets/jsp-legacy/` — legacy scriptlet JSP pages + plain Java helpers
+  (source only; pages analyzed via transpilation, see `scripts/jsp_to_java.py`)
 - Each target has `ground_truth.json` + `GROUND_TRUTH.md` (kept in sync).
 - `analysis/rules/` — Semgrep sink rules per language (8 category-A classes).
 - `analysis/joern/` — Joern scripts: entrypoint enumeration, sink→entrypoint
@@ -66,6 +68,16 @@ to benchmark an LLM + Semgrep + Joern SAST pipeline.
 - `scripts/compare_repo_maps.py` — scores one or more repo-map JSONs
   (tree-sitter or joern schema) against a `ground_truth.json`: route and
   function hit rates plus coverage stats.
+- `scripts/jsp_to_java.py` — JSP→Java transpiler (stdlib only) for
+  `targets/jsp-legacy/`: converts `pages/*.jsp` into servlet-style classes
+  under the gitignored `workspace/jsp-java/` and copies `src/**/*.java`
+  verbatim, so the whole java pipeline (sinks-java.yml, javasrc2cpg, joern
+  scripts) runs on the generated tree (D9: the scripts detect `_jspService`
+  methods in `pages/*_jsp.java` as entrypoints, route by filename
+  convention `X_jsp.java` → `"/X.jsp"`; the LLM judges normalize
+  `X_jsp.java` → `X.jsp` when matching ground truth). Line-faithful: JSP
+  line N maps to Java line N + per-file `offset`; offsets and routes are
+  recorded in `workspace/jsp-java/manifest.json` for mapping findings back.
 
 ## Vulnerability taxonomy
 

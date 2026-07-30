@@ -92,6 +92,13 @@ def simple_name(full_name: str) -> str:
     return base.rsplit(".", 1)[-1] or full_name
 
 
+def cpg_file(path: str) -> str:
+    """Map a CPG-side file back to its ground-truth name: the transpiled JSP
+    tree (scripts/jsp_to_java.py) names pages X_jsp.java where the ground
+    truth has the original pages/X.jsp."""
+    return re.sub(r"_jsp\.java$", ".jsp", path)
+
+
 def load_jsonl(path: str) -> list[dict]:
     rows = []
     with open(path) as f:
@@ -207,18 +214,24 @@ def chain_matches_entry(record: dict, chain: dict, entry: dict) -> bool:
     gt_sink = entry.get("sink")
     ep = chain.get("entrypoint", "")
     calls = chain.get("calls", [])
-    gt_route = entry.get("entrypoint", {}).get("route", "")
+    gt_ep = entry.get("entrypoint", {})
+    gt_route = gt_ep.get("route", "")
     route_ok = bool(gt_route) and route_matches(gt_route, ep)
-    if gt_sink and not record["sink"]["file"].endswith(gt_sink["file"]):
+    sink_file = cpg_file(record["sink"]["file"])
+    if gt_sink and not sink_file.endswith(gt_sink["file"]):
         # Semgrep also flags calls that merely FORWARD to the real sink
         # (e.g. db.query in a route file forwarding to pool.query in db/).
         # Accept such a sink when it sits on the gt dataflow chain AND the
         # route matches — same logical vulnerability, coarser attribution.
-        on_chain = any(record["sink"]["file"].endswith(f) for f in entry.get("chain", []))
+        on_chain = any(sink_file.endswith(f) for f in entry.get("chain", []))
         if not (on_chain and route_ok):
             return False
-    gt_fn = entry.get("entrypoint", {}).get("function", "")
-    if gt_fn and calls and simple_name(calls[0]) == gt_fn:
+    gt_fn = gt_ep.get("function", "")
+    # JSP pages all share the generic handler name _jspService, so the
+    # function name alone cannot discriminate one page from another —
+    # require the route label to match as well.
+    fn_discriminates = not gt_ep.get("file", "").endswith(".jsp")
+    if gt_fn and calls and simple_name(calls[0]) == gt_fn and (fn_discriminates or route_ok):
         return True
     if gt_fn and gt_fn == simple_name(ep):
         return True

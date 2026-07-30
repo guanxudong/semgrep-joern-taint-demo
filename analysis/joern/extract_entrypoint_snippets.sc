@@ -75,6 +75,12 @@ val entrypoints: List[(String, String)] = lang match {
       val sub = subAnn.map(a => routeFromAttr(a.code)).getOrElse("")
       val verb = subAnn.map(_.name.replace("Mapping", "").toUpperCase).getOrElse("?")
       m.fullName -> s"$verb $base$sub"
+    } ++
+    // transpiled-JSP pages (D9): _jspService in generated pages/*_jsp.java;
+    // route by filename convention (pages/X_jsp.java -> /X.jsp), no verb
+    cpg.method.nameExact("_jspService").where(_.file.name(".*_jsp\\.java$")).l.map { m =>
+      val base = m.file.name.headOption.getOrElse("?").replaceAll("^.*/", "").replaceAll("_jsp\\.java$", "")
+      m.fullName -> s"\"/$base.jsp\""
     }
   case "python" =>
     cpg.file.name("routes/.*\\.py$").ast.isMethod

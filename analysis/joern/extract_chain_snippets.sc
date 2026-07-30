@@ -42,7 +42,7 @@ def methodSource(m: Method): String = {
 
 val sinkNames = Map(
   "python" -> "^(execute|executemany|system|popen|eval|exec|loads|load|render_template_string|from_string|fromstring|parseString|open)$",
-  "java"   -> "^(executeQuery|executeUpdate|execute|exec|eval|readObject|readAllBytes|readString|parse|start)$",
+  "java"   -> "^(executeQuery|executeUpdate|execute|exec|eval|readObject|readAllBytes|readString|parse|start|print)$",
   "js"     -> "^(query|execute|exec|execSync|spawn|eval|Function|readFileSync|readFile|parseXml|unserialize|render|compile|send)$",
   "csharp" -> "^(ExecuteReader|ExecuteNonQuery|ExecuteScalar|Start|CompileAssemblyFromSource|ReadAllText|ReadAllBytes|OpenRead|Create|Load|LoadXml|Deserialize|RunCompile|Compile|Content)$"
 )
@@ -53,6 +53,15 @@ val lang = if (cpg.file.name(".*\\.cs$").nonEmpty) "csharp"
            else "js"
 val nameRe = sinkNames(lang)
 
+// ---- transpiled-JSP entrypoints (D9): pages/X_jsp.java::_jspService ----
+// (see backward_from_sinks.sc for the route-label convention)
+val jspEntrypoints: Map[String, String] =
+  if (lang != "java") Map.empty
+  else cpg.method.nameExact("_jspService").where(_.file.name(".*_jsp\\.java$")).l.map { m =>
+    val base = m.file.name.headOption.getOrElse("?").replaceAll("^.*/", "").replaceAll("_jsp\\.java$", "")
+    m.fullName -> s"${m.typeDecl.name.headOption.getOrElse("?")} \"/$base.jsp\""
+  }.toMap
+
 // ---- entrypoint method fullNames (same detection as find_entrypoints.sc) ----
 val entrypoints: Map[String, String] = lang match {
   case "csharp" =>
@@ -62,10 +71,10 @@ val entrypoints: Map[String, String] = lang match {
       m.fullName -> s"${m.typeDecl.name.headOption.getOrElse("?")} $base $sub"
     }.toMap
   case "java" =>
-    cpg.method.where(_.annotation.name(".*(Get|Post|Put|Delete|Patch)Mapping")).l.map { m =>
+    (cpg.method.where(_.annotation.name(".*(Get|Post|Put|Delete|Patch)Mapping")).l.map { m =>
       val ann = m.annotation.name(".*Mapping").code.headOption.getOrElse("")
       m.fullName -> s"${m.typeDecl.name.headOption.getOrElse("?")} $ann"
-    }.toMap
+    } ++ jspEntrypoints).toMap
   case "python" =>
     cpg.file.name("routes/.*\\.py$").ast.isMethod
       .filter(m => m.fullName.matches("routes/[^:]+:<module>\\.[A-Za-z_][A-Za-z0-9_]*")).l

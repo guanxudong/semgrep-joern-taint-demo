@@ -40,6 +40,12 @@ lang match {
       val verb = subAnn.map(_.name.replace("Mapping", "").toUpperCase).getOrElse("?")
       println(s"""{"lang":"java","route":"$verb ${esc(base)}${esc(sub)}","method":"${esc(m.fullName)}","file":"${esc(m.file.name.headOption.getOrElse("?"))}","line":${m.lineNumber.getOrElse(-1)}}""")
     }
+    // transpiled-JSP pages (D9): _jspService in generated pages/*_jsp.java;
+    // route by filename convention (pages/X_jsp.java -> /X.jsp), no verb
+    cpg.method.nameExact("_jspService").where(_.file.name(".*_jsp\\.java$")).l.foreach { m =>
+      val base = m.file.name.headOption.getOrElse("?").replaceAll("^.*/", "").replaceAll("_jsp\\.java$", "")
+      println(s"""{"lang":"java","route":"\\"/${esc(base)}.jsp\\"","method":"${esc(m.fullName)}","file":"${esc(m.file.name.headOption.getOrElse("?"))}","line":${m.lineNumber.getOrElse(-1)}}""")
+    }
 
   case "python" =>
     cpg.file.name("routes/.*\\.py$").ast.isMethod
