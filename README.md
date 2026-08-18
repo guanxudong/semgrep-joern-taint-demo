@@ -1,7 +1,8 @@
 # SAST Benchmark Targets (Semgrep + Joern + LLM)
 
-Intentionally vulnerable, simplified web projects in four language stacks, built
-to evaluate an **LLM + Semgrep + Joern** SAST pipeline:
+Intentionally vulnerable, simplified web projects in four language stacks plus
+a legacy JSP target, built to evaluate an **LLM + Semgrep + Joern** SAST
+pipeline:
 
 1. **Category A (sink-based)** — Semgrep finds sink call sites; Joern traces
    taint backward from each sink to its HTTP entrypoint.
@@ -19,7 +20,9 @@ targets/
 ├── java-spring/        Java + Spring Boot style (@RestController)
 ├── js-ts-express/      Express 4, mixed .js and .ts
 ├── python-flask/       Python + Flask (blueprints)
-└── csharp-aspnet/      C# + ASP.NET Core style controllers
+├── csharp-aspnet/      C# + ASP.NET Core style controllers
+└── jsp-legacy/         legacy scriptlet JSP pages + plain Java helpers
+                        (pages analyzed via transpilation: scripts/jsp_to_java.py)
 ```
 
 Each project contains `routes|controllers/` (entrypoints), `services/`
@@ -155,6 +158,34 @@ Files:
 
 The same commands work for the other targets — swap the rules file
 (`sinks-java.yml`, `sinks-js.yml`, `sinks-csharp.yml`) and the CPG.
+
+## Autonomous investigation agent (`agent/`)
+
+The `agent/` directory turns the fixed pipeline above into a **pydantic-ai
+investigation agent** (spec: `AGENT_MVP_PLAN.md`, status/handoff:
+`agent/HANDOFF.md`): the Semgrep/Joern stages become tools the agent calls
+on demand, an investigator agent drills into the cases the deterministic
+pipeline leaves UNCONFIRMED (cross-file field stores, module variables),
+and an attacker/defender verifier reviews every vulnerable verdict before
+it reaches the report.
+
+```bash
+# one target (reports -> workspace/agent-reports/<target>/)
+uv run --offline agent/run_agent.py --target python-flask
+
+# all five targets, parallelism 2 (reports -> workspace/agent-reports/<date>/)
+uv run --offline agent/run_agent.py --target all
+
+# regression gate against the frozen baseline: non-zero exit when
+# category-A recall drops or a new safe-sample FP appears
+python3 agent/run_baseline.py --compare
+```
+
+MVP status (M0–M5 done): category-A recall 10/10 on all five targets with
+0 safe-sample false positives (2026-08-15 full batch regression, gate
+PASS). Details and per-milestone numbers: `PROGRESS.md`,
+`agent/HANDOFF.md`. Category-B agent-ification is the next phase
+(`AGENT_MVP_PLAN.md` §7A, M6–M8).
 
 ## Notes
 

@@ -4,6 +4,113 @@ Status of the Semgrep + Joern taint-confirmation pipeline as of 2026-07.
 Companion docs: `LIMITATIONS.md` (known gaps), `DECISIONS.md` (what we
 decided to do about them).
 
+## Agent MVP — M0 baseline frozen (2026-08)
+
+`agent/run_baseline.py` (part of the `AGENT_MVP_PLAN.md` milestones) runs the
+full deterministic pipeline + both LLM judges per target and freezes the
+numbers in `workspace/baseline/baseline.json` (artifacts per target in
+`workspace/baseline/<target>/`; every step cached, `--collect-only`
+recomputes the summary). First freeze:
+
+| target | chains CONFIRMED | A recall | B recall | B safe FP |
+|---|---|---|---|---|
+| python-flask | 22/25 | 10/10 | 7/7 | py-safe-02 |
+| java-spring | 21/22 | 8/10 | 7/7 | java-safe-02 |
+| js-ts-express | 24/35 | 10/10 | 7/7 | js-safe-02 |
+| csharp-aspnet | 22/32 | 10/10 | 6/7 | cs-safe-02 |
+| jsp-legacy | 29/32 | 9/10 | 7/7 | jsp-safe-05 |
+
+Deltas vs the 2026-07 numbers above, all tooling drift (not code changes):
+- semgrep 1.168 finds more sink call sites on js/cs (17 and 15 sinks),
+  inflating chain totals (was 28/25); CONFIRMED counts went UP (24/22 vs
+  22/18), no regression. jsp needed `--no-git-ignore` (workspace/ is
+  gitignored; now baked into both `run_baseline.py` and
+  `agent/sast_agent/pipeline.py`).
+- DeepSeek endpoint model drift: A-class FNs are java-cmdi-01/02 and
+  jsp-cmdi-02 — the model now argues `Runtime.exec(String)`/`exec` without a
+  shell is not exploitable (flag-injection still possible; ground truth
+  stands). B-class: safe-02 (ownership-checked IDOR) FP'd on 4 targets,
+  cs-safe-05 flipped too, cs B has 1 FN. Judgment-layer variance, baseline
+  re-pinned to current model behavior for future regression gating (M5).
+
+## Agent MVP — M3 dynamic drill-down done (2026-08-12)
+
+M1 (tool layer) / M2 (per-sink investigation agent) / M3 (drill-down:
+read_function / search_code / joern_query + playbook + mechanical evidence
+validation) of `AGENT_MVP_PLAN.md` are complete; details and handoff notes
+in `agent/HANDOFF.md`. Full 5-target regression of
+`uv run agent/run_agent.py`:
+
+| target | A recall (frozen baseline) | SAFE FP | tokens |
+|---|---|---|---|
+| python-flask | 10/10 (10/10) | none | 171k |
+| java-spring | 10/10 (8/10) | none | 149k |
+| js-ts-express | 10/10 (10/10) | none | 251k |
+| csharp-aspnet | 10/10 (10/10) | none | 363k |
+| jsp-legacy | 10/10 (9/10) | none | 348k |
+
+The §6A drill-down targets all pass with violation-free evidence:
+js-sqli-02 (module variable `pendingName` relay, LIKELY), cs-cmdi-02 and
+cs-path-traversal-01 (C# `Services/` cross-file, LIKELY). M3 fixes (agent
+side only): sink timeout 180→600s (DeepSeek slowness caused synthesized
+not-vulnerable FNs on cs), evidence-validation layer de-noised (per-entry
+identifier union, code_read-only, prose stopwords, tolerant ref parsing),
+XXE prompt rule hardened against parameter-entity theory (js-safe-03 FP
+eliminated). Next: M4 verifier, M5 batch + regression gate.
+
+## Agent MVP — M4 adversarial review done (2026-08-12)
+
+M4 of `AGENT_MVP_PLAN.md` (§7): `agent/sast_agent/verifier.py` runs two
+independent rounds on every vulnerable verdict — attacker (construct a
+concrete trigger request) and defender (hunt an effective sanitizer with
+cited refs) — and `report.apply_verifier()` merges them mechanically
+(plan §4): attacker failure downgrades one level, a defender sanitizer
+with resolvable refs vetoes the verdict to not-vulnerable. Details in
+`agent/HANDOFF.md`. Acceptance + full 5-target regression:
+
+| target | A recall | SAFE FP | tokens (M3) |
+|---|---|---|---|
+| python-flask | 10/10 | none | 603k (171k) |
+| java-spring | 10/10 | none | 597k (149k) |
+| js-ts-express | 10/10 | none | 755k (251k) |
+| csharp-aspnet | 10/10 | none | 858k (363k) |
+| jsp-legacy | 10/10 | none | 969k (348k) |
+
+- Acceptance smoke (`agent/smoke_verifier.py --target all`): every SAFE
+  category-A sample with a finding was forced to vulnerable/CONFIRMED and
+  the defender vetoed 9/9 back (parameterized queries, allow-lists,
+  hardened XML parsers all correctly identified). Shared sinks (vuln and
+  safe chains through one sink) are excluded by the scoring's
+  primary-chain rule.
+- Real-run collateral damage: zero — no false vetoes, no attacker
+  downgrades, no failed rounds; the three M3 drill-down targets stay
+  vuln=True LIKELY with violation-free evidence.
+- Cost: verifier roughly doubles-to-triples token spend (two extra agent
+  runs per vulnerable sink). Parallelism / context trimming is an M5
+  consideration.
+
+## Agent MVP — M5 batch mode + regression gate (2026-08-15)
+
+M5 of `AGENT_MVP_PLAN.md` (§8-M5), details in `agent/HANDOFF.md`:
+
+- `agent/run_agent.py --target all`: runs every target with parallelism 2
+  (one asyncio loop per target thread; joern memory caps it), writes
+  reports to `workspace/agent-reports/<date>/<target>/` plus an aggregate
+  `summary.json` (per-target recall/FP/tokens). Same-day reruns get a
+  time-suffixed dir instead of clobbering; single-target mode unchanged.
+- `agent/run_baseline.py --compare [summary.json]`: regression gate
+  against the frozen `workspace/baseline/baseline.json` — non-zero exit
+  when a compared target's category-A recall drops below the baseline
+  judge_a recall, or a NEW safe-sample FP appears (baseline-known FPs
+  tolerated). Targets missing from the summary are reported as skipped.
+- Validated: gate self-test on fabricated summaries (PASS / recall-drop /
+  new-FP) plus a `--limit 1 --no-verify` batch smoke whose summary the
+  gate correctly rejected end-to-end. Full 5-target batch regression
+  (2026-08-15, verifier on): A recall 10/10 everywhere, 0 safe FPs,
+  ~3.62M tokens, ~32 min wall clock (vs ~105 min sequential in M4);
+  `--compare` GATE: PASS. Per-target confidence splits: see the M5 table
+  in `agent/HANDOFF.md`.
+
 ## Done and validated
 
 - `targets/jsp-legacy/` + `scripts/jsp_to_java.py` (2026-07, D8): new

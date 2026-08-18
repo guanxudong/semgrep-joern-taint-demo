@@ -78,6 +78,16 @@ to benchmark an LLM + Semgrep + Joern SAST pipeline.
   `X_jsp.java` → `X.jsp` when matching ground truth). Line-faithful: JSP
   line N maps to Java line N + per-file `offset`; offsets and routes are
   recorded in `workspace/jsp-java/manifest.json` for mapping findings back.
+- `agent/` — MVP investigation agent (spec `AGENT_MVP_PLAN.md`, handoff
+  `agent/HANDOFF.md`): `sast_agent/` package (config/contracts/pipeline/
+  tools/investigator/verifier/report), CLI `run_agent.py` (`uv run
+  --offline agent/run_agent.py --target <name|all>`; `all` = batch mode,
+  parallelism 2, reports under `workspace/agent-reports/<date>/`),
+  `run_baseline.py` (M0 baseline freezer; `--compare` = regression gate
+  against `workspace/baseline/baseline.json`), smoke scripts
+  (`smoke_tools.py`, `smoke_verifier.py`). Same DeepSeek env as the LLM
+  judges. Agent tools must never read `ground_truth.json` /
+  `GROUND_TRUTH.md` (hard-refused) nor write under `targets/`.
 
 ## Vulnerability taxonomy
 
