@@ -89,16 +89,15 @@ Key observation:
 The most common beginner mistake in this domain is treating "a source→sink path
 exists" as "a vulnerability exists". Example:
 
-```java
-String input = request.getParameter("cmd");
-execute(input);
+```python
+cmd = request.args.get("cmd")
+execute(cmd)
 
-private void execute(String cmd) {
-    if (!ALLOWED_COMMANDS.contains(cmd)) {
-        return;
-    }
-    runtime.exec(cmd);
-}
+
+def execute(cmd):
+    if cmd not in ALLOWED_COMMANDS:
+        return
+    os.system(cmd)
 ```
 
 The taint is real. The vulnerability is not — there is a validation layer in
@@ -120,18 +119,18 @@ configuration. None of that is stored in an agent's memory.
 
 Suppose the agent once saw:
 
-```java
+```python
 foo.validate(input)
 ```
 
 and a user told it: "this validate is a sanitizer, don't report." Stored as
 memory, the next occurrence gets suppressed. Then the codebase evolves:
 
-```java
-foo.validate(input, false)        // validation disabled
-foo.validate(input);              // only checks length
-foo.validate(input);
-dangerousSink(otherValue);        // different value reaches the sink
+```python
+foo.validate(input, strict=False)   # validation disabled
+foo.validate(input)                 # only checks length
+foo.validate(input)
+dangerous_sink(other_value)         # different value reaches the sink
 ```
 
 Memory still whispers "validate = safe" — and we now ship **false negatives**.
