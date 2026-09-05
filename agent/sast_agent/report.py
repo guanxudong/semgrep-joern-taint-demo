@@ -735,9 +735,12 @@ def render_markdown(findings: list[dict], score: dict | None = None) -> str:
     return "\n".join(lines)
 
 
-def render_markdown_b(findings: list[dict], score: dict | None = None) -> str:
+def render_markdown_b(findings: list[dict], score: dict | None = None,
+                      checklist: dict | None = None) -> str:
     """Category-B report (M7): hypothesis-shaped sections — no sink —
-    with the absence-comparison evidence block and the Verifier line."""
+    with the absence-comparison evidence block and the Verifier line.
+    `checklist` (M8) is the planner's taxonomy coverage checklist, rendered
+    as a trailing audit section (§7A 完整性约束)."""
     lines = ["# SAST Agent Report — Category B (M7)", ""]
     if score:
         lines += [
@@ -809,7 +812,32 @@ def render_markdown_b(findings: list[dict], score: dict | None = None) -> str:
         elif val.get("violations"):
             lines.append(f"- Validation: {'; '.join(val['violations'][:3])}")
         lines.append("")
+    lines += _render_checklist_section(checklist)
     return "\n".join(lines)
+
+
+def _render_checklist_section(checklist: dict | None) -> list[str]:
+    """M8 taxonomy coverage audit section (§7A 完整性约束): per class, how
+    many routes the planner examined, submitted, and excluded (with the
+    exclusion reasons — the recall guarantee when no ground truth exists)."""
+    lines = ["## Taxonomy coverage audit", ""]
+    if checklist is None:
+        lines.append("Not available (hypothesis queue predates the M8 "
+                     "planner checklist — re-run run_planner.py).")
+        return lines
+    if checklist.get("derived"):
+        lines.append("> Warning: planner's checklist was incomplete; missing "
+                     "classes were auto-filled from the queue (routes_examined "
+                     "= 0 means \"not reported\").")
+        lines.append("")
+    lines.append("| class | examined | submitted | excluded (route — reason) |")
+    lines.append("|---|---|---|---|")
+    for e in checklist.get("entries", []):
+        excluded = "; ".join(f"{x['route']} — {x['reason']}"
+                             for x in e.get("excluded", [])) or "—"
+        lines.append(f"| {e['vuln_type']} | {e['routes_examined']} "
+                     f"| {len(e.get('submitted', []))} | {excluded} |")
+    return lines
 
 
 def summary_text_b(score: dict) -> str:

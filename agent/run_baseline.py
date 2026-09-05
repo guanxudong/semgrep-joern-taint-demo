@@ -25,12 +25,14 @@ Usage:
     python3 agent/run_baseline.py --targets python-flask,java-spring
     python3 agent/run_baseline.py --skip-llm           # deterministic stages only
     python3 agent/run_baseline.py --force              # redo cached artifacts
-    python3 agent/run_baseline.py --compare [summary.json]  # M5 regression gate
+    python3 agent/run_baseline.py --compare [summary.json]  # M5/M8 regression gate
 
-M5 regression gate (--compare, plan §8-M5): compares an agent batch run's
-summary.json (default: the latest workspace/agent-reports/*/summary.json)
-against this frozen baseline. Exit code is non-zero when any compared
-target's category-A recall drops below the baseline or a NEW safe-sample
+M5/M8 regression gate (--compare, plan §8-M5/§8-M8): compares an agent batch
+run's summary.json (A-class, run_agent) or summary_b.json (B-class,
+run_worker) — auto-detected by content — (default: the latest
+workspace/agent-reports/*/summary*.json) against this frozen baseline. Exit
+code is non-zero when any compared target's recall drops below the baseline
+(judge_a for A summaries, judge_b for B summaries) or a NEW safe-sample
 false positive appears (FP ids already present in the baseline are
 tolerated). Baseline-recording flags are ignored in compare mode.
 
@@ -228,17 +230,20 @@ def _parse_recall(recall: str | None) -> tuple[int, int] | None:
 
 def _latest_summary() -> Path:
     root = REPO / "workspace" / "agent-reports"
-    candidates = sorted(root.glob("*/summary.json"),
+    candidates = sorted(root.glob("*/summary*.json"),
                         key=lambda p: p.stat().st_mtime)
     if not candidates:
         sys.exit(f"no agent batch summary found under {root} "
-                 f"(run: uv run agent/run_agent.py --target all)")
+                 "(run: uv run agent/run_agent.py --target all or "
+                 "uv run agent/run_worker.py --target all)")
     return candidates[-1]
 
 
 def compare_with_baseline(summary_path: Path) -> int:
-    """M5 regression gate (plan §8-M5): agent batch summary vs the frozen
-    baseline. Fails (exit 1) on A-recall drop or a NEW safe-sample FP."""
+    """M5/M8 regression gate (plan §8-M5, §8-M8): agent batch summary vs the
+    frozen baseline. Auto-detects the summary shape — A-class summary.json
+    (run_agent) or B-class summary_b.json (run_worker). Fails (exit 1) on a
+    recall drop below the baseline or a NEW safe-sample FP."""
     baseline_file = BASELINE_DIR / "baseline.json"
     if not baseline_file.exists():
         sys.exit(f"frozen baseline missing: {baseline_file}")
@@ -246,9 +251,18 @@ def compare_with_baseline(summary_path: Path) -> int:
     summary = json.loads(summary_path.read_text())
     results = summary.get("targets", summary)  # tolerate a bare target dict
 
-    log(f"comparing {summary_path} against {baseline_file}")
+    # B-class summaries (run_worker) carry recall_B_*/safe_fp_b keys
+    b_mode = any("recall_B" in r for r in results.values()
+                 if isinstance(r, dict))
+    judge_key = "judge_b" if b_mode else "judge_a"
+    recall_hit_key = "recall_B_hit" if b_mode else "recall_A_hit"
+    recall_str_key = "recall_B" if b_mode else "recall_A"
+    fp_key = "safe_fp_b" if b_mode else "safe_fp"
+    label = "B" if b_mode else "A"
+
+    log(f"comparing {summary_path} ({label}-class) against {baseline_file}")
     failed = False
-    print(f"\n{'target':<15} {'A recall (agent vs baseline)':<30} "
+    print(f"\n{'target':<15} {f'{label} recall (agent vs baseline)':<30} "
           f"{'safe FP':<28} gate")
     for name, res in results.items():
         base = baseline.get(name)
@@ -262,18 +276,19 @@ def compare_with_baseline(summary_path: Path) -> int:
             continue
 
         reasons = []
-        b_recall = _parse_recall(base.get("judge_a", {}).get("recall"))
-        a_hit = res.get("recall_A_hit")
-        recall_txt = f"{res.get('recall_A', '?')} vs {base.get('judge_a', {}).get('recall', '?')}"
-        if b_recall is None or a_hit is None:
+        b_recall = _parse_recall(base.get(judge_key, {}).get("recall"))
+        hit = res.get(recall_hit_key)
+        recall_txt = (f"{res.get(recall_str_key, '?')} vs "
+                      f"{base.get(judge_key, {}).get('recall', '?')}")
+        if b_recall is None or hit is None:
             reasons.append("recall unparseable")
-        elif a_hit < b_recall[0]:
-            reasons.append(f"A recall dropped {b_recall[0]} -> {a_hit}")
+        elif hit < b_recall[0]:
+            reasons.append(f"{label} recall dropped {b_recall[0]} -> {hit}")
 
         known_fp = set(base.get("judge_a", {}).get("safe_fp", []))
         known_fp |= set(base.get("judge_b", {}).get("safe_fp", []))
-        new_fp = [f for f in res.get("safe_fp", []) if f not in known_fp]
-        fp_txt = str(res.get("safe_fp") or [])[:26]
+        new_fp = [f for f in res.get(fp_key, []) if f not in known_fp]
+        fp_txt = str(res.get(fp_key) or [])[:26]
         if new_fp:
             reasons.append(f"new safe FP: {new_fp}")
 
@@ -301,8 +316,9 @@ def main() -> int:
                     help="only recompute baseline.json from existing artifacts")
     ap.add_argument("--compare", nargs="?", const="", default=None,
                     metavar="SUMMARY_JSON",
-                    help="M5 regression gate: compare an agent batch "
-                         "summary.json (default: latest under "
+                    help="M5/M8 regression gate: compare an agent batch "
+                         "summary.json (A-class) or summary_b.json "
+                         "(B-class) (default: latest under "
                          "workspace/agent-reports/) against the frozen "
                          "baseline; non-zero exit on recall drop or new "
                          "safe-sample FP")

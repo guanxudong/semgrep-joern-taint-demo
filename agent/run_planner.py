@@ -112,6 +112,21 @@ def check_coverage(target: str, hypotheses: list[dict]) -> dict:
             "rows": rows}
 
 
+def print_checklist(checklist: dict | None) -> None:
+    """M8: one-line-per-class summary of the taxonomy coverage checklist
+    (audit trail; warning only — the GT coverage check drives the exit
+    code)."""
+    if checklist is None:
+        print("  taxonomy checklist: MISSING (planner did not report coverage)")
+        return
+    tag = " [derived fallback]" if checklist.get("derived") else ""
+    print(f"  taxonomy checklist:{tag}")
+    for e in checklist.get("entries", []):
+        print(f"    {e['vuln_type']}: {e['routes_examined']} examined, "
+              f"{len(e.get('submitted', []))} submitted, "
+              f"{len(e.get('excluded', []))} excluded")
+
+
 async def one_target(target: str, check: bool) -> dict:
     tools = SastTools(target, config.cache_dir(target))
     result = await run_planner(target, tools)
@@ -120,10 +135,11 @@ async def one_target(target: str, check: bool) -> dict:
         f"({st['tokens']} tokens, {st['seconds']}s, {st['status']}) "
         f"-> {result['path']}")
     out = {"hypotheses": len(result["hypotheses"]), "stats": st}
+    print(f"\n=== {target} ===")
+    print_checklist(result.get("checklist"))
     if check:
         cov = check_coverage(target, result["hypotheses"])
         out["coverage"] = cov
-        print(f"\n=== {target} ===")
         print(f"B-route coverage: {cov['covered']}/{cov['total']}")
         for u in cov["uncovered"]:
             print(f"  UNCOVERED: {u}")

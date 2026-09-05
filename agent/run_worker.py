@@ -165,7 +165,10 @@ def finalize_target_b(target: str, out_dir: Path) -> dict:
     with open(cfg["ground_truth"]) as f:
         ground_truth = json.load(f)
     score = report_mod.score_b_findings(findings, ground_truth)
-    md = report_mod.render_markdown_b(findings, score)
+    # M8: planner's taxonomy coverage checklist (cache, no GT) -> audit section
+    cov_path = config.cache_dir(target) / "taxonomy_checklist.json"
+    checklist = json.loads(cov_path.read_text()) if cov_path.exists() else None
+    md = report_mod.render_markdown_b(findings, score, checklist)
     report_path = out_dir / "report_b.md"
     report_path.write_text(md + "\n")
     log(f"report written to {report_path}")

@@ -19,7 +19,8 @@ import sys
 from pathlib import Path
 
 from . import config, pipeline
-from .contracts import BFinding, Finding, Hypothesis, Sink
+from .contracts import (B_VULN_TYPES, BFinding, Finding, Hypothesis, Sink,
+                        TaxonomyEntry)
 
 REPO = config.REPO
 
@@ -316,10 +317,17 @@ class SastTools:
             snip["code"] = _strip_gt_tags(snip.get("code", ""))
         return rec
 
-    def submit_hypotheses(self, hypotheses: list[dict]) -> dict:
+    def submit_hypotheses(self, hypotheses: list[dict],
+                          coverage: list[dict] | None = None) -> dict:
         """Validate and enqueue category-B hypotheses (§7A). Each entry must
         satisfy the Hypothesis contract; invalid entries are reported, not
-        fatal. Appends to cache_dir/hypotheses.jsonl."""
+        fatal. Appends to cache_dir/hypotheses.jsonl.
+
+        `coverage` is the taxonomy coverage checklist (§7A 完整性约束, M8):
+        one TaxonomyEntry per class. Validated separately — a bad checklist
+        never blocks the hypothesis queue (recall first); on failure a
+        mechanical fallback is derived from the accepted hypotheses and
+        flagged "derived"."""
         accepted, rejected = [], []
         for i, h in enumerate(hypotheses):
             try:
@@ -330,8 +338,39 @@ class SastTools:
         with open(out, "a") as fh:
             for h in accepted:
                 fh.write(h.model_dump_json() + "\n")
-        return {"ok": not rejected, "accepted": len(accepted),
-                "rejected": rejected, "written_to": str(out)}
+        result = {"ok": not rejected, "accepted": len(accepted),
+                  "rejected": rejected, "written_to": str(out)}
+        if coverage is not None:
+            checklist = self._validate_coverage(coverage, accepted)
+            cov_path = self.cache_dir / "taxonomy_checklist.json"
+            cov_path.write_text(json.dumps(checklist, indent=2,
+                                           ensure_ascii=False) + "\n")
+            result["checklist_written_to"] = str(cov_path)
+            result["checklist_derived"] = checklist.get("derived", False)
+        return result
+
+    @staticmethod
+    def _validate_coverage(coverage: list[dict],
+                           accepted: list[Hypothesis]) -> dict:
+        """Validate the planner's taxonomy checklist; tolerate a partial one
+        by auto-filling the missing classes from the queue (flagged
+        "derived"), so a sloppy checklist never blocks the hypotheses."""
+        try:
+            entries = [TaxonomyEntry.model_validate(e) for e in coverage]
+        except Exception:
+            entries = []
+        seen = {e.vuln_type for e in entries}
+        derived = False
+        if seen != set(B_VULN_TYPES):
+            derived = True
+            by_type: dict[str, list[str]] = {t: [] for t in B_VULN_TYPES}
+            for h in accepted:
+                by_type[h.vuln_type].append(h.route)
+            entries += [TaxonomyEntry(vuln_type=t, routes_examined=0,
+                                      submitted=by_type[t])
+                        for t in B_VULN_TYPES if t not in seen]
+        return {"derived": derived,
+                "entries": [e.model_dump() for e in entries]}
 
     # ---- finding submission ----
 

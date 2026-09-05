@@ -1,4 +1,4 @@
-# Agent MVP 进度交接（2026-09-05，M7 验收通过）
+# Agent MVP 进度交接（2026-09-05，M8 完成）
 
 > 给新会话的接续说明。实现规格见 `AGENT_MVP_PLAN.md`（M0–M5 为当前 MVP，
 > M6–M8 是 B 类 agent 化的后续阶段）。本文件记录执行状态，读它 + 计划文件即可继续。
@@ -24,6 +24,37 @@
 | M5 批量化 + 回归门禁 | ✅ 完成 | `run_agent.py --target all`（并行 2）+ `run_baseline.py --compare`，验收见下 |
 | M6 B 类 planner | ✅ 完成 | `agent/run_planner.py` + `sast_agent/planner.py`，5 target B 路由覆盖 45/45（见下） |
 | M7 B 类 worker | ✅ 完成 | `worker.py` + `run_worker.py`；验收 4/4 target PASS（jsp-legacy 当时按用户决定排除，后于 2026-09-05 删除，见下） |
+| M8 taxonomy 检查表 + B 类门禁 | ✅ 完成 | planner 逐类审计表入 report_b.md；`run_baseline.py --compare` 自动识别 summary_b.json（见下） |
+
+## M8 实现要点（2026-09-05，计划 §7A 完整性约束 / §8-M8）
+
+- **taxonomy 覆盖检查表**：`contracts.TaxonomyEntry`（vuln_type 限 7 类 +
+  routes_examined/submitted/excluded[{route, reason}]）。planner 的
+  `submit_hypotheses` 工具增加必填 `coverage` 参数（一次调用原子提交，
+  避免第二个工具被遗忘）；prompt 要求 7 类逐类记账（考察几条、提交哪些、
+  排除哪些+理由），缺席有效性判断仍是 worker 的活。
+  `tools._validate_coverage` 宽容兜底：整体校验失败或缺类时从队列机械补全
+  （routes_examined=0 表示"planner 未报告"），JSON 里标 `"derived": true`；
+  检查表落 `workspace/agent-cache/<target>/taxonomy_checklist.json`
+  （planner 重跑先清旧的，防止陈旧检查表残留）。
+- **入报告**：`report.render_markdown_b(..., checklist=None)` 尾部新增
+  `## Taxonomy coverage audit` 表（类 | examined | submitted | excluded
+  (route — reason)）；`run_worker.finalize_target_b` 从 cache 读检查表传入。
+  无检查表时渲染 "not available (pre-M8 queue)" 提示。
+- **B 类回归门禁**：`run_baseline.py --compare` 按内容自动识别
+  `summary.json`（A 类，对 judge_a）vs `summary_b.json`（B 类，对
+  judge_b）：recall 命中数低于基线即 FAIL；新 SAFE FP（不在基线
+  judge_a/judge_b safe_fp 并集，即容忍 py/java/js/cs-safe-02）即 FAIL。
+  `_latest_summary()` 改为 glob `*/summary*.json`（两种汇总都找）。
+- **验收（2026-09-05）**：`agent/smoke_m8.py` 25 项无 LLM 检查全过
+  （契约接受/拒绝、coverage round-trip、partial/invalid 兜底、渲染、
+  门禁伪造用例 PASS/recall 降/新 FP/A 类回归）；`run_worker.py --target
+  all --dry-run` 全通；4 target planner 重跑全部 7 类齐、无 derived 兜底、
+  GT 路由覆盖 9/9（M6 gate PASS），tokens py 75.6k / java 68.0k / js 96.4k
+  / cs 60.2k ≈ 300k；用 M7 验收真实 `summary_b.json`
+  （`workspace/agent-reports/2026-09-04-233106-m7/`）跑门禁端到端
+  **GATE: PASS**（4/4，FP 恰为基线已知四个）。M8 两项验收（检查表入
+  报告 + B 类门禁）达成，AGENT_MVP_PLAN.md 里程碑全部关闭。
 
 ## M7 实现要点（2026-09-04，计划 §7A）
 
@@ -359,7 +390,9 @@
 - ~~**M7**（B 类 worker playbook + 缺席对比）~~ 已完成（2026-09-04，验收
   PASS 4/4 target，jsp-legacy 按用户决定排除、后于 2026-09-05 从仓库
   删除；见上"M7 实现要点"）。
-  之后是 **M8**（taxonomy 覆盖检查表入报告 + B 类回归门禁扩展）。
+- ~~**M8**（taxonomy 覆盖检查表入报告 + B 类回归门禁扩展）~~ 已完成
+  （2026-09-05，见上"M8 实现要点"）。**AGENT_MVP_PLAN.md 的 M0–M8 里程碑
+  至此全部关闭。** 后续方向见计划 §10（规则自进化、生产无 GT 运营等）。
 
 ## 环境速查
 

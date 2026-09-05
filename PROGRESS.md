@@ -134,6 +134,31 @@ verified the code, saw the guard, and dropped every safe-02/05 route. Next:
 M7 (B-class worker playbook + absence comparison, consuming
 hypotheses.jsonl), M8 (taxonomy coverage checklist + B-class gate).
 
+## Agent MVP — M8 taxonomy checklist + B-class gate done (2026-09-05)
+
+M8 of `AGENT_MVP_PLAN.md` (§7A 完整性约束 / §8-M8), the final milestone —
+M0–M8 now all closed. Details in `agent/HANDOFF.md`:
+
+- **Taxonomy coverage checklist** (§7A: in a no-ground-truth environment
+  this is the only visible B-recall guarantee): the planner's
+  `submit_hypotheses` tool now takes a mandatory `coverage` argument — one
+  `TaxonomyEntry` per B class (routes_examined / submitted / excluded with
+  per-route reasons). Validated tolerantly (missing classes auto-filled
+  from the queue, flagged `"derived"`), written to
+  `workspace/agent-cache/<target>/taxonomy_checklist.json`, and rendered by
+  `render_markdown_b` into a trailing `## Taxonomy coverage audit` table in
+  `report_b.md` (`finalize_target_b` passes it through from the cache).
+- **Regression gate extended to B**: `run_baseline.py --compare`
+  auto-detects `summary.json` (A-class, gated on judge_a) vs
+  `summary_b.json` (B-class, gated on judge_b) by content; recall drop or a
+  NEW safe-sample FP (beyond the baseline-known py/java/js/cs-safe-02)
+  exits non-zero. `_latest_summary()` globs both summary shapes.
+- Acceptance: `agent/smoke_m8.py` 25 no-LLM checks green; planner re-run on
+  all 4 targets (≈300k tokens total) produced complete 7-class checklists
+  with zero derived fallbacks and 9/9 GT route coverage each (M6 gate
+  PASS); the B gate run end-to-end on the real M7 acceptance
+  `summary_b.json` → **GATE: PASS** (4/4 targets).
+
 ## Agent MVP — M7 category-B worker implemented (2026-09-04)
 
 M7 of `AGENT_MVP_PLAN.md` (§7A): the per-hypothesis worker + absence-

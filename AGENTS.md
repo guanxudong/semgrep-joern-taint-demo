@@ -75,15 +75,18 @@ to benchmark an LLM + Semgrep + Joern SAST pipeline.
   --offline agent/run_agent.py --target <name|all>`; `all` = batch mode,
   parallelism 2, reports under `workspace/agent-reports/<date>/`),
   `run_baseline.py` (M0 baseline freezer; `--compare` = regression gate
-  against `workspace/baseline/baseline.json`), `run_planner.py` (M6
+  against `workspace/baseline/baseline.json`, auto-detects A-class
+  `summary.json` vs B-class `summary_b.json`), `run_planner.py` (M6
   category-B planner: hypothesis queue per target to
   `workspace/agent-cache/<target>/hypotheses.jsonl` + post-run ground-truth
-  route-coverage check), `run_worker.py` (M7 category-B worker: consumes
+  route-coverage check; M8: also emits a per-class taxonomy coverage
+  checklist to `taxonomy_checklist.json`, rendered into `report_b.md`'s
+  audit section), `run_worker.py` (M7 category-B worker: consumes
   the hypothesis queue, absence-comparison investigation + adversarial
   review, reports under `workspace/agent-reports/<date>-m7/<target>/`),
   smoke scripts
-  (`smoke_tools.py`, `smoke_verifier.py`). Same DeepSeek env as the LLM
-  judges. Agent tools must never read `ground_truth.json` /
+  (`smoke_tools.py`, `smoke_verifier.py`, `smoke_m8.py`). Same DeepSeek env
+  as the LLM judges. Agent tools must never read `ground_truth.json` /
   `GROUND_TRUTH.md` (hard-refused) nor write under `targets/`.
 
 ## Vulnerability taxonomy

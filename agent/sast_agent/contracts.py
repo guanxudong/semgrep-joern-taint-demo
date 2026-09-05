@@ -89,6 +89,33 @@ class Hypothesis(BaseModel):
         return v
 
 
+class ExcludedRoute(BaseModel):
+    """One route the planner considered for a class but did not submit (§7A
+    完整性约束): the exclusion reason is the audit trail."""
+
+    route: str              # "GET /users/<id>" (digest route label)
+    reason: str             # 为何排除: guard seen / trait absent / ...
+
+
+class TaxonomyEntry(BaseModel):
+    """Per-class accounting for the taxonomy coverage checklist (§7A 完整性
+    约束, M8): in a no-ground-truth environment this is the only visible
+    guarantee of category-B recall."""
+
+    vuln_type: str          # one of B_VULN_TYPES (validated below)
+    routes_examined: int = Field(ge=0)  # how many routes the planner looked at
+    submitted: list[str] = Field(default_factory=list)   # routes hypothesized
+    excluded: list[ExcludedRoute] = Field(default_factory=list)
+
+    @field_validator("vuln_type")
+    @classmethod
+    def _known_type(cls, v: str) -> str:
+        if v not in B_VULN_TYPES:
+            raise ValueError(f"unknown category-B vuln_type {v!r} "
+                             f"(allowed: {', '.join(B_VULN_TYPES)})")
+        return v
+
+
 class BFinding(BaseModel):
     """One worker verdict over a category-B hypothesis (§7A, M7).
 

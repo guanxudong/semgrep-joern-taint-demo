@@ -27,7 +27,7 @@ from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.providers.openai import OpenAIProvider
 
 from . import config
-from .contracts import B_VULN_TYPES, Hypothesis
+from .contracts import B_VULN_TYPES, Hypothesis, TaxonomyEntry
 from .tools import SastTools
 
 _DIGEST_MAX_CHARS = 8000
@@ -86,6 +86,17 @@ Your job:
    entrypoint ("file:function"), vuln_type (one of the 7 classes),
    trigger_features (the route traits that matched), rationale (why the
    check looks absent, citing what you saw).
+5. The SAME submit_hypotheses call must also carry the `coverage` argument:
+   the taxonomy coverage checklist — for EACH of the 7 classes (all seven,
+   even when nothing was submitted) report:
+   - routes_examined: how many routes in the digest you actually looked at
+     for that class;
+   - submitted: the routes that produced a hypothesis for that class;
+   - excluded: every route you CONSIDERED for that class but did not
+     submit, each with a one-line reason (guard seen and looks effective,
+     trait absent, not applicable, ...).
+   This checklist is the audit trail proving no route was silently skipped —
+   an omitted class or an unexplained exclusion is a recall hole.
 
 Rules:
 - Recall first: when in doubt, submit the hypothesis. A later stage
@@ -165,20 +176,26 @@ def build_planner_agent() -> Agent:
 
     @agent.tool
     def submit_hypotheses(ctx: RunContext[SastTools],
-                          hypotheses: list[Hypothesis]) -> dict:
-        """Submit the hypothesis queue. Call exactly once, last, with ALL
-        hypotheses in one list."""
+                          hypotheses: list[Hypothesis],
+                          coverage: list[TaxonomyEntry]) -> dict:
+        """Submit the hypothesis queue AND the taxonomy coverage checklist.
+        Call exactly once, last. `coverage` must have one entry per each of
+        the 7 classes: routes_examined, submitted routes, and excluded
+        routes with reasons."""
         return ctx.deps.submit_hypotheses(
-            [h.model_dump() for h in hypotheses])
+            [h.model_dump() for h in hypotheses],
+            coverage=[e.model_dump() for e in coverage])
 
     return agent
 
 
 async def run_planner(target: str, tools: SastTools) -> dict:
     """One planner run over a target. Truncates hypotheses.jsonl first, then
-    returns {"hypotheses": [...], "stats": {...}}."""
+    returns {"hypotheses": [...], "stats": {...}, "checklist": {...}|None}."""
     out = tools.cache_dir / "hypotheses.jsonl"
     out.write_text("")  # fresh queue per run
+    cov_path = tools.cache_dir / "taxonomy_checklist.json"
+    cov_path.unlink(missing_ok=True)  # stale checklists must not survive
 
     digest = _build_digest(target, tools)
     stats = {"tokens": 0, "requests": 0, "seconds": 0.0,
@@ -216,5 +233,8 @@ async def run_planner(target: str, tools: SastTools) -> dict:
                               .model_dump())
     if not hypotheses and stats["status"] == "submitted":
         stats["status"] = "no_submission"
-    return {"hypotheses": hypotheses, "stats": stats,
+    checklist = None
+    if cov_path.exists():
+        checklist = json.loads(cov_path.read_text())
+    return {"hypotheses": hypotheses, "stats": stats, "checklist": checklist,
             "path": str(Path(out).relative_to(config.REPO))}
