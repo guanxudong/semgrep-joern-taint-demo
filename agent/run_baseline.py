@@ -22,7 +22,7 @@ Aggregate metrics go to workspace/baseline/baseline.json.
 
 Usage:
     python3 agent/run_baseline.py                      # all targets
-    python3 agent/run_baseline.py --targets python-flask,jsp-legacy
+    python3 agent/run_baseline.py --targets python-flask,java-spring
     python3 agent/run_baseline.py --skip-llm           # deterministic stages only
     python3 agent/run_baseline.py --force              # redo cached artifacts
     python3 agent/run_baseline.py --compare [summary.json]  # M5 regression gate
@@ -82,14 +82,6 @@ TARGETS = {
         "tree": "targets/csharp-aspnet",
         "ground_truth": "targets/csharp-aspnet/ground_truth.json",
     },
-    # JSP is analyzed via the transpiled Java tree (D9): the whole java
-    # pipeline runs on workspace/jsp-java.
-    "jsp-legacy": {
-        "rules": "analysis/rules/sinks-java.yml",
-        "tree": "workspace/jsp-java",
-        "ground_truth": "targets/jsp-legacy/ground_truth.json",
-        "pre": ["python3", "scripts/jsp_to_java.py", "targets/jsp-legacy"],
-    },
 }
 
 
@@ -135,7 +127,6 @@ def run_target(name: str, cfg: dict, force: bool, skip_llm: bool) -> dict:
     if cfg.get("pre"):
         run(cfg["pre"])
 
-    # --no-git-ignore: the JSP pipeline scans workspace/jsp-java (gitignored)
     raw = d / "semgrep_raw.json"
     step(raw, force, run,
          ["semgrep", "--config", rules, "--json", "--no-git-ignore",

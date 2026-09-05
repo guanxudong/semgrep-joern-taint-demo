@@ -4,6 +4,13 @@ Optimization decisions for the taint-confirmation pipeline, derived from
 `analysis/LIMITATIONS.md` (2026-07). Ordered by cost/benefit; each entry
 states the decision and the rationale. See `PROGRESS.md` for execution order.
 
+> **2026-09-05: D8/D9 superseded.** The jsp-legacy target and
+> `scripts/jsp_to_java.py` were removed from the repo by user decision
+> (recoverable from git history). D8/D9 below are kept as historical
+> record; their engine-side traces (the `out.print` rule branch,
+> `_jspService` entrypoint detection, `_jsp.java→.jsp` scorer
+> normalization) remain dormant and harmless for the 4 remaining targets.
+
 ## Target coverage (2026-07)
 
 ### D8. JSP support via transpile-to-Java

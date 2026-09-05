@@ -6,7 +6,7 @@ investigator/verifier (M2+), never in the tools themselves.
 
 from enum import Enum
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class Sink(BaseModel):
@@ -32,6 +32,7 @@ class TaintFlow(BaseModel):
 class Evidence(BaseModel):
     kind: str               # "chain" | "taint_flow" | "code_read"
                             # | "joern_query" | "exploit_sketch"
+                            # | "absence_comparison" (category B, §7A)
     summary: str
     refs: list[str]         # "file:start-end" 可核查位置
 
@@ -60,6 +61,51 @@ class Gap(str, Enum):
     GAP_NO_CHAIN = "GAP_NO_CHAIN"      # backward 回溯未达入口点
     GAP_FLOW_DEAD = "GAP_FLOW_DEAD"    # 链存在但 taint_confirm 未确认
     GAP_MISSING_STORE = "GAP_MISSING_STORE"  # 字段写入点不在链上
+
+
+# Category-B taxonomy (§7A): the 7 non-sink classes the planner hypothesizes.
+B_VULN_TYPES = ("idor", "business-logic", "race-condition", "priv-esc",
+                "mass-assignment", "broken-access-control", "auth-flaws")
+
+
+class Hypothesis(BaseModel):
+    """One planner-generated category-B suspicion (§7A 队列来源).
+
+    Evidence shape is "a check that should be there is absent", so the queue
+    entry is a route + expected class + why the route looks suspicious."""
+
+    route: str              # "GET /users/<id>" or "JSP /X.jsp"
+    entrypoint: str         # "file:function" or method fullName
+    vuln_type: str          # one of B_VULN_TYPES (validated below)
+    trigger_features: str   # 触发特征: the route traits that matched a heuristic
+    rationale: str          # 初判理由: why this route may miss the check
+
+    @field_validator("vuln_type")
+    @classmethod
+    def _known_type(cls, v: str) -> str:
+        if v not in B_VULN_TYPES:
+            raise ValueError(f"unknown category-B vuln_type {v!r} "
+                             f"(allowed: {', '.join(B_VULN_TYPES)})")
+        return v
+
+
+class BFinding(BaseModel):
+    """One worker verdict over a category-B hypothesis (§7A, M7).
+
+    The A-class Finding anchors on a sink; the B-class evidence shape is an
+    ABSENT check, so the anchor is the planner's Hypothesis (echoed back
+    verbatim) plus the absence-comparison evidence."""
+
+    hypothesis: Hypothesis  # 原样回填 (route/entrypoint/vuln_type/...)
+    verdict: Verdict
+    confidence_level: str   # "CONFIRMED" | "LIKELY" | "SUSPICIOUS"
+                            # (report 机械映射，非 LLM 填)
+    evidence: list[Evidence]
+    exploit_sketch: str | None = None   # attacker 视角的具体越权请求
+    sanitizer_notes: str | None = None  # defender 视角结论（middleware/框架层 guard）
+    comparison: str | None = None       # 缺席对比结论: 对比对象路由 + 检查代码
+                                        # file:line（CONFIRMED 必填）
+    stats: dict = Field(default_factory=dict)  # tool_calls / tokens / verifier
 
 
 class InvestigationBrief(BaseModel):

@@ -1,7 +1,7 @@
 # SAST Benchmark Targets (Semgrep + Joern + LLM)
 
-Intentionally vulnerable, simplified web projects in four language stacks plus
-a legacy JSP target, built to evaluate an **LLM + Semgrep + Joern** SAST
+Intentionally vulnerable, simplified web projects in four language stacks,
+built to evaluate an **LLM + Semgrep + Joern** SAST
 pipeline:
 
 1. **Category A (sink-based)** — Semgrep finds sink call sites; Joern traces
@@ -20,10 +20,11 @@ targets/
 ├── java-spring/        Java + Spring Boot style (@RestController)
 ├── js-ts-express/      Express 4, mixed .js and .ts
 ├── python-flask/       Python + Flask (blueprints)
-├── csharp-aspnet/      C# + ASP.NET Core style controllers
-└── jsp-legacy/         legacy scriptlet JSP pages + plain Java helpers
-                        (pages analyzed via transpilation: scripts/jsp_to_java.py)
+└── csharp-aspnet/      C# + ASP.NET Core style controllers
 ```
+
+(The legacy JSP target `jsp-legacy/` was removed on 2026-09-05; it lives on
+in git history if ever needed again.)
 
 Each project contains `routes|controllers/` (entrypoints), `services/`
 (business logic), `data|db/` (data access sinks), `config/` (hardcoded

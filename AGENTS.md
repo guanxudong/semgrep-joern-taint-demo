@@ -22,9 +22,10 @@ to benchmark an LLM + Semgrep + Joern SAST pipeline.
 - `targets/js-ts-express/` — Express, mixed .js/.ts (source only)
 - `targets/python-flask/` — Flask blueprints (source only)
 - `targets/csharp-aspnet/` — ASP.NET Core style (source only)
-- `targets/jsp-legacy/` — legacy scriptlet JSP pages + plain Java helpers
-  (source only; pages analyzed via transpilation, see `scripts/jsp_to_java.py`)
 - Each target has `ground_truth.json` + `GROUND_TRUTH.md` (kept in sync).
+  (The fifth target `targets/jsp-legacy/` and its transpiler
+  `scripts/jsp_to_java.py` were removed on 2026-09-05 by user decision —
+  recoverable from git history.)
 - `analysis/rules/` — Semgrep sink rules per language (8 category-A classes).
 - `analysis/joern/` — Joern scripts: entrypoint enumeration, sink→entrypoint
   backward trace (JSONL side output via `CHAINS_JSON`), entrypoint→down
@@ -68,23 +69,19 @@ to benchmark an LLM + Semgrep + Joern SAST pipeline.
 - `scripts/compare_repo_maps.py` — scores one or more repo-map JSONs
   (tree-sitter or joern schema) against a `ground_truth.json`: route and
   function hit rates plus coverage stats.
-- `scripts/jsp_to_java.py` — JSP→Java transpiler (stdlib only) for
-  `targets/jsp-legacy/`: converts `pages/*.jsp` into servlet-style classes
-  under the gitignored `workspace/jsp-java/` and copies `src/**/*.java`
-  verbatim, so the whole java pipeline (sinks-java.yml, javasrc2cpg, joern
-  scripts) runs on the generated tree (D9: the scripts detect `_jspService`
-  methods in `pages/*_jsp.java` as entrypoints, route by filename
-  convention `X_jsp.java` → `"/X.jsp"`; the LLM judges normalize
-  `X_jsp.java` → `X.jsp` when matching ground truth). Line-faithful: JSP
-  line N maps to Java line N + per-file `offset`; offsets and routes are
-  recorded in `workspace/jsp-java/manifest.json` for mapping findings back.
 - `agent/` — MVP investigation agent (spec `AGENT_MVP_PLAN.md`, handoff
   `agent/HANDOFF.md`): `sast_agent/` package (config/contracts/pipeline/
-  tools/investigator/verifier/report), CLI `run_agent.py` (`uv run
+  tools/investigator/verifier/report/planner/worker), CLI `run_agent.py` (`uv run
   --offline agent/run_agent.py --target <name|all>`; `all` = batch mode,
   parallelism 2, reports under `workspace/agent-reports/<date>/`),
   `run_baseline.py` (M0 baseline freezer; `--compare` = regression gate
-  against `workspace/baseline/baseline.json`), smoke scripts
+  against `workspace/baseline/baseline.json`), `run_planner.py` (M6
+  category-B planner: hypothesis queue per target to
+  `workspace/agent-cache/<target>/hypotheses.jsonl` + post-run ground-truth
+  route-coverage check), `run_worker.py` (M7 category-B worker: consumes
+  the hypothesis queue, absence-comparison investigation + adversarial
+  review, reports under `workspace/agent-reports/<date>-m7/<target>/`),
+  smoke scripts
   (`smoke_tools.py`, `smoke_verifier.py`). Same DeepSeek env as the LLM
   judges. Agent tools must never read `ground_truth.json` /
   `GROUND_TRUTH.md` (hard-refused) nor write under `targets/`.

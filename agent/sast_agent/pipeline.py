@@ -55,7 +55,8 @@ _pre_done: set[str] = set()
 
 
 def _prepare_tree(target: str) -> dict:
-    """Target config, after running any pre step (jsp-legacy transpile).
+    """Target config, after running any pre step (none currently — the
+    jsp-legacy transpile was the only user, removed 2026-09).
     The pre step runs ONCE per process: it deletes+regenerates the tree
     (rmtree), so re-running it per pipeline call is both racy and
     invalidates CPG staleness checks mid-run."""
@@ -240,6 +241,29 @@ def get_chain_snippets(target: str, sink_key: str | None = None,
                 s.get("file", ""), s.get("line", -1), s.get("rule", "")) != sink_key:
             continue
         records.append(rec)
+    return records
+
+
+def get_entrypoint_snippets(target: str, force: bool = False) -> list[dict]:
+    """extract_entrypoint_snippets.sc -> per-entrypoint slice records (cached).
+    Records: {"entrypoint": {route, method, file, line}, "callees": [...],
+    "snippets": [{function, file, start_line, end_line, code}, ...]} — the
+    handler plus its forward-reachable callees, for category-B review (§7A)."""
+    cfg = _prepare_tree(target)
+    cpg = ensure_cpg(target, force=force)
+    out = config.cache_dir(target) / "entrypoint_snippets.jsonl"
+
+    if not out.exists() or force:
+        _run(["joern", "--script", "analysis/joern/extract_entrypoint_snippets.sc",
+              str(cpg)],
+             env={"SRC_ROOT": cfg["tree"]}, stdout_to=out)
+
+    records = []
+    for line in out.read_text().splitlines():
+        line = line.strip()
+        if not line.startswith("{"):
+            continue
+        records.append(json.loads(line))
     return records
 
 

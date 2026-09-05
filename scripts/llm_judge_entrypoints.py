@@ -128,9 +128,9 @@ def simple_name(full_name: str) -> str:
 
 
 def cpg_file(path: str) -> str:
-    """Map a CPG-side file back to its ground-truth name: the transpiled JSP
-    tree (scripts/jsp_to_java.py) names pages X_jsp.java where the ground
-    truth has the original pages/X.jsp."""
+    """Map a CPG-side file back to its ground-truth name. Kept as the
+    single normalization point (the JSP transpilation it handled was
+    removed with the jsp-legacy target, 2026-09)."""
     return re.sub(r"_jsp\.java$", ".jsp", path)
 
 

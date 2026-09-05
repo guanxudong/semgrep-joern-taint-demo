@@ -13,17 +13,28 @@ Usage:
 
 import json
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
 
 from . import config, pipeline
-from .contracts import Finding, Sink
+from .contracts import BFinding, Finding, Hypothesis, Sink
 
 REPO = config.REPO
 
 # Red line §9.2: never readable through any tool.
 GROUND_TRUTH_NAMES = {"ground_truth.json", "GROUND_TRUTH.md"}
+
+# Ground-truth marker comments (`// VULN: id` / `# SAFE: id`) must never
+# reach the LLM (red line §9.2) — same pattern as investigator._GT_TAG
+# (tag portion dropped anywhere on the line, so prefixed output like
+# read_function's numbered lines is covered too).
+_GT_TAG = re.compile(r"(?://|#)\s*(?:VULN|SAFE):[^\n]*")
+
+
+def _strip_gt_tags(code: str) -> str:
+    return _GT_TAG.sub("", code)
 
 REPO_MAP_MAX_CHARS = 4000
 SEARCH_MAX_LINES = 100
@@ -269,6 +280,59 @@ class SastTools:
             out.write_text(stdout)
         return _parse_json_lines(out.read_text(), 500)
 
+    # ---- category-B planner tools (§7A, M6) ----
+
+    def get_forward_slice(self, entrypoint: str) -> dict | str:
+        """Handler + forward-reachable callee source for one entrypoint
+        (extract_entrypoint_snippets.sc). `entrypoint` may be a method
+        fullName, a route label ("GET /users/<id>"), or a bare function
+        name. Ground-truth marker comments are stripped before returning."""
+        records = pipeline.get_entrypoint_snippets(self.target)
+
+        def ep_of(rec: dict) -> dict:
+            return rec.get("entrypoint", {})
+
+        # 1) method fullName exact, then suffix ("...users.py:<module>.get_user")
+        hit = [r for r in records if ep_of(r).get("method") == entrypoint]
+        if not hit:
+            hit = [r for r in records
+                   if ep_of(r).get("method", "").endswith(entrypoint)]
+        # 2) route label (case-insensitive, spacing-insensitive)
+        if not hit:
+            want = " ".join(entrypoint.split()).upper()
+            hit = [r for r in records
+                   if " ".join(ep_of(r).get("route", "").split()).upper() == want]
+        # 3) bare function name (last dotted segment of the fullName)
+        if not hit:
+            hit = [r for r in records
+                   if ep_of(r).get("method", "").rsplit(".", 1)[-1] == entrypoint]
+        if not hit:
+            known = [f"{ep_of(r).get('method', '?')} ({ep_of(r).get('route', '?')})"
+                     for r in records[:20]]
+            return ("ERROR: no forward slice for entrypoint "
+                    f"{entrypoint!r}. Available (first 20):\n" + "\n".join(known))
+        rec = hit[0]
+        for snip in rec.get("snippets", []):
+            snip["code"] = _strip_gt_tags(snip.get("code", ""))
+        return rec
+
+    def submit_hypotheses(self, hypotheses: list[dict]) -> dict:
+        """Validate and enqueue category-B hypotheses (§7A). Each entry must
+        satisfy the Hypothesis contract; invalid entries are reported, not
+        fatal. Appends to cache_dir/hypotheses.jsonl."""
+        accepted, rejected = [], []
+        for i, h in enumerate(hypotheses):
+            try:
+                accepted.append(Hypothesis.model_validate(h))
+            except Exception as e:
+                rejected.append({"index": i, "error": str(e)[:300]})
+        out = self.cache_dir / "hypotheses.jsonl"
+        with open(out, "a") as fh:
+            for h in accepted:
+                fh.write(h.model_dump_json() + "\n")
+        return {"ok": not rejected, "accepted": len(accepted),
+                "rejected": rejected, "written_to": str(out)}
+
     # ---- finding submission ----
 
     def submit_finding(self, finding: dict) -> dict:
@@ -282,3 +346,18 @@ class SastTools:
         with open(out, "a") as fh:
             fh.write(f.model_dump_json() + "\n")
         return {"ok": True, "sink": f.sink.id, "written_to": str(out)}
+
+    def submit_b_finding(self, finding: dict) -> dict:
+        """Validate and record a category-B BFinding (§7A, M7); ends the
+        current hypothesis's investigation. Same pattern as submit_finding —
+        the tool call itself is the submission channel; run_worker.py owns
+        the final report-dir persistence."""
+        try:
+            f = BFinding.model_validate(finding)
+        except Exception as e:
+            return {"ok": False, "error": f"invalid BFinding: {e}"}
+        out = self.cache_dir / "findings_b.jsonl"
+        with open(out, "a") as fh:
+            fh.write(f.model_dump_json() + "\n")
+        return {"ok": True, "route": f.hypothesis.route,
+                "written_to": str(out)}

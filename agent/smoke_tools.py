@@ -94,6 +94,36 @@ def main() -> int:
           isinstance(rows, list) and len(rows) > 0,
           f"{len(rows)} rows" if isinstance(rows, list) else str(rows)[:120])
 
+    # 9. submit_hypotheses: valid entry accepted, bad vuln_type rejected
+    ok_res = tools.submit_hypotheses([{
+        "route": "GET /users/<id>", "entrypoint": "routes/users.py:get_user",
+        "vuln_type": "idor", "trigger_features": "path <id>, no auth decorator",
+        "rationale": "smoke: no ownership check visible",
+    }])
+    check("submit_hypotheses accepts a valid hypothesis",
+          ok_res.get("ok") and ok_res.get("accepted") == 1, str(ok_res)[:120])
+    bad_res = tools.submit_hypotheses([{
+        "route": "GET /x", "entrypoint": "a.py:b", "vuln_type": "sqli",
+        "trigger_features": "x", "rationale": "y",
+    }])
+    check("submit_hypotheses rejects a non-B vuln_type",
+          not bad_res.get("ok") and bad_res.get("accepted") == 0
+          and len(bad_res.get("rejected", [])) == 1, str(bad_res)[:120])
+
+    # 10. get_forward_slice returns the handler + callees, GT tags stripped
+    slice_ = tools.get_forward_slice("get_user")
+    check("get_forward_slice('get_user') returns snippets",
+          isinstance(slice_, dict) and len(slice_.get("snippets", [])) > 0,
+          f"{len(slice_.get('snippets', []))} snippets"
+          if isinstance(slice_, dict) else str(slice_)[:120])
+    if isinstance(slice_, dict):
+        blob = "\n".join(s.get("code", "") for s in slice_.get("snippets", []))
+        check("get_forward_slice strips VULN:/SAFE: markers",
+              "VULN:" not in blob and "SAFE:" not in blob)
+    miss = tools.get_forward_slice("no_such_function_xyz")
+    check("get_forward_slice reports unknown entrypoints",
+          isinstance(miss, str) and miss.startswith("ERROR"))
+
     print(f"\n{'ALL PASS' if _failures == 0 else f'{_failures} FAILURES'}")
     return 1 if _failures else 0
 

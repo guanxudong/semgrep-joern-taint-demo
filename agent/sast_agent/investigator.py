@@ -43,8 +43,10 @@ from .tools import SastTools
 
 # Ground-truth marker comments (`// VULN: id` / `# SAFE: id`) must never
 # reach the LLM (red line §9.2 — snippet validation as in the judges).
-# Regex copied from scripts/llm_judge_sink_chains.py.
-_GT_TAG = re.compile(r"^\s*(?://|#)\s*(?:VULN|SAFE):.*(?:\n|$)", re.MULTILINE)
+# The tag portion is dropped anywhere on the line (not only at line start):
+# read_function output prefixes lines with "  12: " and search_code returns
+# rg-formatted "path:12:content", so a ^-anchored pattern misses both.
+_GT_TAG = re.compile(r"(?://|#)\s*(?:VULN|SAFE):[^\n]*")
 
 
 def _strip_gt_tags(code: str) -> str:

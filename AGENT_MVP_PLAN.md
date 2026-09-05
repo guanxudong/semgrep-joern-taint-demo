@@ -1,5 +1,10 @@
 # AI SAST Agent MVP 改进计划
 
+> **2026-09-05 注**：jsp-legacy target 已按用户决定从仓库删除（含
+> `scripts/jsp_to_java.py`）。本文档中所有 JSP 相关内容（§0 基线行、
+> M6/M7 的 5-target 口径）均为历史记录；当前有效 target 为 4 个
+> （java-spring / js-ts-express / python-flask / csharp-aspnet）。
+
 目标：把现有的 Semgrep + Joern 一次性流水线改造成基于 **pydantic-ai** 的
 autonomous investigation agent。核心转变：流水线的各阶段从"固定编排的管道"
 降级为"agent 手里的工具"，由 LLM 根据中间结果动态决定调查路径。

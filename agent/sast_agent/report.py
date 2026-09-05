@@ -35,6 +35,30 @@ def assign_confidence_level(brief: InvestigationBrief, verdict: Verdict) -> str:
     return "SUSPICIOUS"
 
 
+def assign_confidence_level_b(verdict: Verdict, evidence: list) -> str:
+    """Initial M7 mapping for category-B findings (plan §4). The verifier
+    rounds refine it afterwards (apply_verifier_b: attacker failure
+    downgrades, defender guard vetoes).
+
+    - CONFIRMED: vulnerable AND absence-comparison evidence with >=2
+      parseable file:line refs (where the check is missing + where a
+      sibling has it);
+    - LIKELY: vulnerable but the comparison evidence is incomplete;
+    - not-vulnerable findings stay out of the grading (SUSPICIOUS, same
+      convention as A-class).
+    """
+    if not verdict.is_vulnerable:
+        return "SUSPICIOUS"
+    n_refs = 0
+    for e in evidence:
+        kind = e.get("kind") if isinstance(e, dict) else getattr(e, "kind", "")
+        if kind != "absence_comparison":
+            continue
+        refs = e.get("refs", []) if isinstance(e, dict) else getattr(e, "refs", [])
+        n_refs += sum(1 for ref in refs if _REF_RE.search(ref.strip()))
+    return "CONFIRMED" if n_refs >= 2 else "LIKELY"
+
+
 # ---------------------------------------------------------------------------
 # Matching logic copied from scripts/llm_judge_sink_chains.py (kept in sync):
 # simple_name / cpg_file / route_matches / chain_matches_entry operate on the
@@ -132,6 +156,81 @@ def chain_matches_entry(record: dict, chain: dict, entry: dict) -> bool:
     if gt_fn and gt_fn == simple_name(ep):
         return True
     return route_ok
+
+
+# ---------------------------------------------------------------------------
+# Category-B entrypoint matching (M7) — copied from
+# scripts/llm_judge_entrypoints.py:247-270 (kept in sync): file+function is
+# the primary match (strength 1000), file+route-suffix the fallback, and
+# each gt entry keeps only its strongest match so wildcard labels don't
+# leak a vulnerable verdict onto a safe sibling.
+# ---------------------------------------------------------------------------
+
+
+def route_specificity(gt_route: str, ep: str) -> int | None:
+    """Match a ground-truth route ('GET /users/search') against a hypothesis
+    route label (copied from scripts/llm_judge_entrypoints.py). Returns the
+    number of matched label segments (higher = more specific), or None.
+    Unlike route_matches above, also handles 'GET /users/<id>' raw-path
+    labels (the planner's Hypothesis.route shape)."""
+    parts = gt_route.split(None, 1)
+    if len(parts) != 2:
+        return 1 if gt_route.upper() in ep.upper() else None
+    method, path = parts[0].upper(), parts[1]
+    m = _ep_method(ep)
+    if m and m != method:
+        return None
+    gt_segs = _norm_segs(path)
+    cand: list[str] = []
+    # quoted fragments (java/csharp annotation style) ...
+    for frag in re.findall(r'"([^"]*)"', ep):
+        cand.extend(_norm_segs(frag))
+    # ... or the raw path after the verb ("GET /users/<id>" style)
+    if not cand:
+        ep_parts = ep.split(None, 1)
+        if len(ep_parts) == 2 and _ep_method(ep_parts[0]):
+            cand = _norm_segs(ep_parts[1])
+    if not cand:
+        return None
+    if len(cand) <= len(gt_segs) and gt_segs[-len(cand):] == cand:
+        return len(cand)
+    return None
+
+
+def entrypoint_matches_entry(record: dict, entry: dict) -> int:
+    """Does this hypothesis record correspond to the ground-truth entry?
+    (copied from scripts/llm_judge_entrypoints.py).
+
+    Primary: file + function. Fallback: file + route suffix (needed where
+    handlers are anonymous lambdas that never match the gt function name).
+    Returns a match STRENGTH (0 = no match); function matches outrank any
+    route match, and among route matches the suffix specificity counts."""
+    gt_ep = entry.get("entrypoint", {})
+    ep = record.get("entrypoint", {})
+    gt_file = gt_ep.get("file", "")
+    file_ok = bool(gt_file) and cpg_file(ep.get("file", "")).endswith(gt_file)
+    gt_fn = gt_ep.get("function", "")
+    if gt_fn and file_ok and simple_name(ep.get("method", "")) == gt_fn:
+        return 1000
+    gt_route = gt_ep.get("route", "")
+    if gt_route and (file_ok or not gt_file):
+        spec = route_specificity(gt_route, ep.get("route", ""))
+        if spec is not None:
+            return spec
+    return 0
+
+
+def _hypothesis_as_record(f: dict) -> dict:
+    """Adapt a BFinding to the judge's entrypoint-record shape. The
+    planner's entrypoint is 'file:function' (or a CPG fullName); the route
+    label carries the verb + path."""
+    ep = f.get("hypothesis", {}).get("entrypoint", "")
+    file, _, fn = ep.partition(":")
+    return {"entrypoint": {
+        "file": file if fn else "",   # fullName-only labels match by route
+        "method": fn or ep,
+        "route": f.get("hypothesis", {}).get("route", ""),
+    }}
 
 
 # ---------------------------------------------------------------------------
@@ -239,6 +338,64 @@ def _recall(rows: list[dict]) -> str:
         return "n/a"
     hit = sum(1 for r in rows if r["verdict"] == "TP")
     return f"{hit}/{len(rows)} = {hit / len(rows):.0%}"
+
+
+def score_b_findings(findings: list[dict], ground_truth: list[dict]) -> dict:
+    """Category-B metrics (M7), mirroring scripts/llm_judge_entrypoints.py's
+    score(): recall_B, safe FP, TP/FN/FP/TN over gt category=="B" entries
+    only. A gt entry counts as detected when a best-strength-matching
+    BFinding has the same vuln_type and verdict.is_vulnerable=true; a SAFE
+    B sample hit by a same-vuln_type vulnerable finding is an FP."""
+    records = [(f, _hypothesis_as_record(f)) for f in findings]
+    rows, tp, fn, fp, tn = [], 0, 0, 0, 0
+    for entry in ground_truth:
+        if entry.get("category") != "B":
+            continue
+        vt = entry.get("vuln_type", "")
+        scored = [
+            (s, f) for f, rec in records
+            if (s := entrypoint_matches_entry(rec, entry)) > 0
+        ]
+        # keep only the most specific match(es): a wildcard-only label such
+        # as 'GET /:id' suffix-matches both 'GET /users/:id' (vulnerable)
+        # and 'GET /users/me/:id' (safe) — attributing it to both would
+        # turn the vulnerable finding into an FP on the safe sample
+        best = max((s for s, _ in scored), default=0)
+        matches = [f for s, f in scored if s == best]
+        vuln_hits = [
+            m for m in matches
+            if m.get("hypothesis", {}).get("vuln_type") == vt
+            and m.get("verdict", {}).get("is_vulnerable")
+        ]
+        expected = entry["expected"]
+        if expected == "vulnerable":
+            ok = bool(vuln_hits)
+            tp += ok
+            fn += not ok
+            verdict = "TP" if ok else "FN"
+        else:  # safe sample
+            bad = bool(vuln_hits)
+            fp += bad
+            tn += not bad
+            verdict = "FP" if bad else "TN"
+        rows.append({
+            "id": entry["id"], "category": entry["category"], "vuln_type": vt,
+            "expected": expected, "verdict": verdict,
+            "findings_matched": len(matches),
+            "max_confidence": max(
+                (m.get("verdict", {}).get("confidence", 0) for m in vuln_hits),
+                default=0),
+        })
+    vuln_rows = [r for r in rows if r["expected"] == "vulnerable"]
+    return {
+        "rows": rows,
+        "recall_B": _recall(vuln_rows),
+        "recall_B_hit": sum(1 for r in vuln_rows if r["verdict"] == "TP"),
+        "recall_B_total": len(vuln_rows),
+        "safe_fp_b": [r["id"] for r in rows
+                      if r["expected"] == "safe" and r["verdict"] == "FP"],
+        "tp": tp, "fn": fn, "fp": fp, "tn": tn,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -374,16 +531,28 @@ def validate_finding(f: dict, tree: Path) -> list[str]:
     return violations
 
 
-def apply_validation(findings: list[dict], tree: Path) -> list[dict]:
+def apply_validation(findings: list[dict], tree: Path,
+                     b_class: bool = False) -> list[dict]:
     """Downgrade CONFIRMED findings with validation violations to LIKELY and
-    attach the violation list (§6A 校验层: 造假或断档 -> 自动降级)."""
+    attach the violation list (§6A 校验层: 造假或断档 -> 自动降级).
+
+    b_class=True adds the M7 category-B rule (plan §4): a CONFIRMED B
+    finding must carry absence_comparison evidence (the missing spot + the
+    comparison route's check location), else it drops to LIKELY."""
     for f in findings:
         violations = validate_finding(f, tree)
         f["validation"] = {"violations": violations}
-        if violations and f.get("confidence_level") == "CONFIRMED":
-            f["confidence_level"] = "LIKELY"
-            f["validation"]["downgraded"] = (
-                "evidence gap: " + "; ".join(violations[:3]))
+        if f.get("confidence_level") == "CONFIRMED":
+            if b_class and not any(
+                    e.get("kind") == "absence_comparison"
+                    for e in f.get("evidence", [])):
+                violations.append("CONFIRMED without absence_comparison "
+                                  "evidence (category-B rule)")
+                f["validation"]["violations"] = violations
+            if violations:
+                f["confidence_level"] = "LIKELY"
+                f["validation"]["downgraded"] = (
+                    "evidence gap: " + "; ".join(violations[:3]))
     return findings
 
 
@@ -485,6 +654,16 @@ def apply_verifier(finding: dict, verifier: dict,
     return finding
 
 
+def apply_verifier_b(finding: dict, verifier: dict,
+                     tree: Path | None = None) -> dict:
+    """M7 category-B merge — thin wrapper over apply_verifier. The merge is
+    generic dict surgery on verdict/confidence_level/exploit_sketch/
+    sanitizer_notes (nothing sink-specific), and BFindings carry all four.
+    The defender veto still requires >=1 cited ref resolving on disk, so a
+    hallucinated middleware guard can never hide a real vulnerability."""
+    return apply_verifier(finding, verifier, tree)
+
+
 # ---------------------------------------------------------------------------
 # Markdown report
 # ---------------------------------------------------------------------------
@@ -554,6 +733,97 @@ def render_markdown(findings: list[dict], score: dict | None = None) -> str:
             lines.append(f"- Validation: {'; '.join(val['violations'][:3])}")
         lines.append("")
     return "\n".join(lines)
+
+
+def render_markdown_b(findings: list[dict], score: dict | None = None) -> str:
+    """Category-B report (M7): hypothesis-shaped sections — no sink —
+    with the absence-comparison evidence block and the Verifier line."""
+    lines = ["# SAST Agent Report — Category B (M7)", ""]
+    if score:
+        lines += [
+            f"- Recall category B: **{score['recall_B']}**",
+            f"- Safe-sample false positives (B): {score['safe_fp_b'] or 'none'}",
+            f"- TP={score['tp']} FN={score['fn']} FP={score['fp']} TN={score['tn']}",
+        ]
+    levels: dict[str, int] = {}
+    for f in findings:
+        levels[f["confidence_level"]] = levels.get(f["confidence_level"], 0) + 1
+    lines.append(
+        "- Confidence levels: "
+        + ", ".join(f"{lvl} {levels.get(lvl, 0)}"
+                    for lvl in ("CONFIRMED", "LIKELY", "SUSPICIOUS")))
+    lines.append("")
+    for f in findings:
+        hyp, verdict = f["hypothesis"], f["verdict"]
+        stats = f.get("stats", {})
+        lines += [
+            f"## {hyp['vuln_type']}: {hyp['route']}",
+            "",
+            f"- Entrypoint: `{hyp['entrypoint']}`",
+            f"- Trigger features: {hyp.get('trigger_features', '')}",
+            f"- Planner rationale: {hyp.get('rationale', '')}",
+            f"- Verdict: **{'VULNERABLE' if verdict['is_vulnerable'] else 'not vulnerable'}** "
+            f"({f['confidence_level']}, confidence {verdict['confidence']:.2f})",
+            f"- Reasoning: {verdict['reasoning']}",
+        ]
+        absence = [e for e in f.get("evidence", [])
+                   if e.get("kind") == "absence_comparison"]
+        if absence or f.get("comparison"):
+            lines.append("- Absence comparison:")
+            if f.get("comparison"):
+                lines.append(f"  - Comparison: {f['comparison']}")
+            for e in absence:
+                lines.append(
+                    f"  - {e.get('summary', '')} "
+                    f"(refs: {', '.join(e.get('refs', [])) or 'none'})")
+        refs = [ref for e in f.get("evidence", []) for ref in e.get("refs", [])]
+        if refs:
+            lines.append(f"- Evidence refs: {', '.join(refs)}")
+        if f.get("exploit_sketch"):
+            lines.append(f"- Exploit sketch: {f['exploit_sketch']}")
+        if f.get("sanitizer_notes"):
+            lines.append(f"- Sanitizer notes: {f['sanitizer_notes']}")
+        lines.append(
+            f"- Stats: {stats.get('tool_calls', '?')} tool calls, "
+            f"{stats.get('tokens', '?')} tokens, {stats.get('seconds', '?')}s "
+            f"({stats.get('status', '?')})")
+        vf = stats.get("verifier") or {}
+        if vf.get("skipped"):
+            pass  # verifier only runs on vulnerable verdicts
+        elif "attacker" in vf or "defender" in vf:
+            att, dfn = vf.get("attacker") or {}, vf.get("defender") or {}
+            line = ("- Verifier: attacker exploit="
+                    + ("yes" if att.get("exploit_possible") else "no")
+                    + "; defender guard="
+                    + ("yes" if dfn.get("effective_sanitizer") else "no")
+                    + (f" ({dfn['kind']})" if dfn.get("effective_sanitizer")
+                       and dfn.get("kind") else ""))
+            if vf.get("veto"):
+                line += " — VETOED to not vulnerable"
+            for note in vf.get("notes", []):
+                line += f"; {note}"
+            lines.append(line)
+        val = f.get("validation") or {}
+        if val.get("downgraded"):
+            lines.append(f"- Validation: downgraded to LIKELY — {val['downgraded']}")
+        elif val.get("violations"):
+            lines.append(f"- Validation: {'; '.join(val['violations'][:3])}")
+        lines.append("")
+    return "\n".join(lines)
+
+
+def summary_text_b(score: dict) -> str:
+    """Category-B printable summary (same table shape as summary_text)."""
+    out = [f"\n{'id':<28} {'cat':<3} {'vuln_type':<17} {'expected':<10} verdict"]
+    for r in score["rows"]:
+        out.append(f"{r['id']:<28} {r['category']:<3} {r['vuln_type']:<17} "
+                   f"{r['expected']:<10} {r['verdict']}")
+    out += [
+        f"\nRecall category B (non-sink):    {score['recall_B']}",
+        f"Safe-sample false positives (B): {score['safe_fp_b'] or 'none'}",
+        f"TP={score['tp']} FN={score['fn']} FP={score['fp']} TN={score['tn']}",
+    ]
+    return "\n".join(out)
 
 
 def summary_text(score: dict) -> str:

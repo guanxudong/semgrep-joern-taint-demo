@@ -111,6 +111,85 @@ M5 of `AGENT_MVP_PLAN.md` (§8-M5), details in `agent/HANDOFF.md`:
   `--compare` GATE: PASS. Per-target confidence splits: see the M5 table
   in `agent/HANDOFF.md`.
 
+## Agent MVP — M6 category-B planner done (2026-09-03)
+
+M6 of `AGENT_MVP_PLAN.md` (§7A): the hypothesis-driven queue for category B.
+New `agent/sast_agent/planner.py` (one planner run per target over a compact
+repo-map route digest; mandatory trait→class mappings — the model must submit
+a hypothesis for every route matching a trait even when a guard is visible,
+since guard-effectiveness is the M7 worker's call) plus two new SastTools:
+`submit_hypotheses` (Hypothesis contract, 7-class validation, appends to
+`workspace/agent-cache/<target>/hypotheses.jsonl` — the M7 input queue) and
+`get_forward_slice` (wraps `extract_entrypoint_snippets.sc` via
+`pipeline.get_entrypoint_snippets`, GT markers stripped). CLI
+`agent/run_planner.py --target <name|all>` runs the planner and then checks
+route coverage of every ground-truth category-B entry (validation only —
+ground truth never reaches the agent); exit 1 below 100%.
+
+Acceptance run (2026-09-03, 5 targets sequential): **B-route coverage
+45/45** (7 vuln + 2 safe B routes per target), 14–18 hypotheses per target,
+~272k tokens total, ~6.4 min wall clock. Prompt iteration that mattered:
+heuristics as *mandatory* mappings — as plain heuristics the planner
+verified the code, saw the guard, and dropped every safe-02/05 route. Next:
+M7 (B-class worker playbook + absence comparison, consuming
+hypotheses.jsonl), M8 (taxonomy coverage checklist + B-class gate).
+
+## Agent MVP — M7 category-B worker implemented (2026-09-04)
+
+M7 of `AGENT_MVP_PLAN.md` (§7A): the per-hypothesis worker + absence-
+comparison playbook. New `agent/sast_agent/worker.py` (clones the
+investigator skeleton — per-hypothesis agent, _ToolGuard budget warning,
+asyncio timeout + UsageLimits, ToolCallPart submission extraction, honest
+synthesized fallback; tools = get_forward_slice + GT-stripped
+read_function/search_code + submit_b_finding, no joern_query), `BFinding`
+contract + `Evidence.kind "absence_comparison"`, `tools.submit_b_finding`,
+B-class attacker/defender rounds in verifier.py (attacker constructs a
+concrete over-reach request; defender hunts middleware/framework-level
+guards the forward slice cannot see), `report.assign_confidence_level_b` /
+`apply_verifier_b` / `apply_validation(b_class=True)` (CONFIRMED requires
+absence_comparison evidence) / `score_b_findings` (mirrors
+`llm_judge_entrypoints.py` best-strength matching) / `render_markdown_b`,
+budgets `WORKER_MAX_TOOL_CALLS=15` / `WORKER_TIMEOUT_SECONDS=600`, and CLI
+`agent/run_worker.py --target <name|all> [--limit N] [--no-verify]
+[--dry-run]` writing `workspace/agent-reports/<date>-m7/<target>/
+{findings_b.jsonl,report_b.md}` + `summary_b.json`.
+
+Implementation verified (2026-09-04, no LLM calls): py_compile on all
+touched files; import + unit smoke (BFinding round-trip, confidence
+mapping, prompt rendering without leftover `.format()` placeholders,
+submit_b_finding accept/reject, scorer TP on a real matching finding +
+type-mismatch FN, validation B-rule downgrade, verifier veto with
+resolvable ref + hallucinated-ref veto ignored); `--dry-run` end-to-end
+for all 5 targets (queue load → stub findings → validation → scoring →
+report_b.md + summary_b.json; every gt B entry matched by ≥1 hypothesis).
+
+**Acceptance run (2026-09-04 23:31, jsp-legacy excluded by user decision):
+PASS on all 4 targets** — `workspace/agent-reports/2026-09-04-233106-m7/`:
+
+| target | recall_B (baseline) | SAFE FP | tokens |
+|---|---|---|---|
+| python-flask | 7/7 (7/7) | py-safe-02 (baseline-known) | 2.14M |
+| java-spring | 7/7 (7/7) | java-safe-02 (baseline-known) | 2.52M |
+| js-ts-express | 7/7 (7/7) | js-safe-02 (baseline-known) | 1.97M |
+| csharp-aspnet | 7/7 (**6/7**) | cs-safe-02 (baseline-known) | 2.75M |
+
+0 new SAFE FPs (exactly the baseline's own four); 48 CONFIRMED findings
+all carry absence_comparison evidence, 190 file:line refs spot-verified
+on disk (0 bad); 0 GT-label leakage in finding text. Wall clock ~27 min
+with `WORKER_CONCURRENCY=3` (hypothesis-level asyncio.gather; cold-joern
+cache warmed sequentially first). Fixes made during acceptance: GT-tag
+strip now handles line-numbered/rg-prefixed tool output (the old
+`^`-anchored regex silently leaked `VULN:`/`SAFE:` labels through
+read_function/search_code — first run discarded); B-class token budget
+split out as `WORKER_TOTAL_LLM_TOKENS=3M`; one retry on transient API
+errors. `--exclude` flag added to run_worker.py for selective batch runs.
+
+**jsp-legacy removed (2026-09-05, user decision)**: the target and
+`scripts/jsp_to_java.py` were `git rm`'d (recoverable from history);
+config/run_baseline TARGETS entries and doc references cleaned. Dormant
+leftovers by design: the `out.print` branch in sinks-java.yml, joern
+`_jspService` detection, and the scorers' `_jsp.java→.jsp` normalization.
+
 ## Done and validated
 
 - `targets/jsp-legacy/` + `scripts/jsp_to_java.py` (2026-07, D8): new
