@@ -169,6 +169,17 @@ Decision: for each field/variable appearing in a chain, append the source of
 all its write call sites to the snippet. No full trace needed — store-site
 source only.
 
+**Status (2026-09-10): DROPPED — the agent covers it, and that's the better
+method here.** The M3 drill-down playbook (AGENT_MVP_PLAN.md §6A) closes the
+gap at runtime: `search_code(var)` finds the store sites, and the three
+store-side targets (js-sqli-02, cs-cmdi-02, cs-path-traversal-01) all reach
+vuln=True LIKELY 0.95 with the write sites cited as violation-free evidence
+refs — benchmark recall sits at the 10/10 ceiling with zero SAFE FPs. The
+mechanical version would save tokens but change no verdict, and per the
+project principle (AI SAST: when the LLM already covers a gap well,
+engine-side machinery must justify itself by effect, not elegance) it
+doesn't. Recorded here so it isn't re-proposed.
+
 ### D7. Name-based call-site fallback for C# (LOW_CONFIDENCE)
 
 Gap: C# flows crossing into `Services/` stay UNCONFIRMED because

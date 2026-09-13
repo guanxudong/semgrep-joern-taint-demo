@@ -37,8 +37,12 @@ to benchmark an LLM + Semgrep + Joern SAST pipeline.
   object on stdout — joern logs go to stdout too, so pipe through
   `awk '/^\{$/,/^\}$/'`).
 - `analysis/LIMITATIONS.md` — known gaps (source coverage, dataflow-engine
-  limits, pipeline issues) and the not-yet-implemented ideas backlog. Read
+  limits, pipeline issues) and the pruned ideas backlog (currently empty —
+  engine-side work was dropped 2026-09-10 in favor of the LLM/agent layer;
+  see PROGRESS.md "Remaining backlog"). Read
   this first when resuming analysis work in a new session.
+- `plan.md` (repo root) — post-MVP improvement roadmap (M9+), ROI-ordered
+  (2026-09-10).
 - `PROGRESS.md` / `DECISIONS.md` (repo root) — pipeline status/next
   steps, and the optimization decisions (do-now / do-later / deferred) taken
   against those limitations.

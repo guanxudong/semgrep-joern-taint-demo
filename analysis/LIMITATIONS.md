@@ -48,6 +48,12 @@ DFG confirmation) across all four targets. Raw outputs: `/tmp/taint_{py,java,js,
   D7), taking cs A recall to 10/10. This bullet now concerns only
   `taint_confirm.sc` dataflow confirmation, which is still open.
 
+Update (2026-09-10, both bullets above): the remaining dataflow-side gaps
+were dropped as work items — the agent layer (M3 drill-down + M4 verifier)
+covers them at the recall ceiling, and an engine fix would only relabel
+LIKELY→CONFIRMED on those few cases without changing any verdict. They stay
+documented here as factual engine limitations, not planned work.
+
 ## 3. Pipeline/structural limitations
 
 - **Sanitizers are invisible to dataflow (by design).** `parse_xml_safe`
@@ -58,6 +64,10 @@ DFG confirmation) across all four targets. Raw outputs: `/tmp/taint_{py,java,js,
   includes `find_staged`/`query_unsafe` but not the sibling `stage_name` call
   that stores the taint. Snippets given to the LLM lack the store site; the
   LLM must infer it (usually possible, but it's a gap).
+  Update (2026-09-10): the M3 agent drill-down playbook covers this
+  dynamically (jump-on-store relay via `search_code`) with violation-free
+  evidence and recall at the ceiling — the planned mechanical snippet
+  enrichment was dropped as it would change no verdict (DECISIONS.md D6).
 - **Forward script marks sinks by name only** and over-approximates:
   `query_safe`'s parameterized `execute@27` gets tagged SINK. Semgrep's
   shape-aware rules are the better sink oracle; keep name-tagging for display
@@ -82,24 +92,23 @@ DFG confirmation) across all four targets. Raw outputs: `/tmp/taint_{py,java,js,
   now emits NO_CHAIN rows for them (observed: 3 cs `Services/` sinks from
   dropped csharpsrc2cpg CALL edges, 3 js intermediate/indirection sinks).
 
-## 4. Discussed but not implemented (ideas backlog)
+## 4. Ideas backlog (open)
 
-- **Name-based call-site fallback** when CALL edges are missing (call graph
-  gaps in dynamic languages): walk `cpg.call.name("<methodName>")` instead of
-  resolved `.caller` edges. Trades precision (same-name collisions) for
-  recall.
-- **Jump-on-Parameter / Jump-on-Field manual traversal** (see session
-  discussion): mostly redundant with `reachableByFlows`, still relevant for
-  module-variable fields and as a lightweight mode without the dataflow
-  overlay.
-- ~~**Chain-level confirmation report**: join `backward_from_sinks` chains
-  with `taint_confirm` flows to mark each *entrypoint->sink chain* (not just
-  each sink) CONFIRMED/UNCONFIRMED.~~ **DONE (D3, 2026-07)** —
-  `CHAINS_JSON` side output + `scripts/chain_report.py`.
-- **Forward dataflow from sources** to discover taint-driven sinks without
-  Semgrep (source -> any sensitive call), complementing sink-first analysis.
-- **Category B (business logic) remains LLM-only**: CFG-based checks for
-  TOCTOU (check-then-act without lock) and sanitizer dominance were sketched
-  but not built.
-- **Uncovered source kinds**: Flask path params (above), file uploads,
-  websocket/CLI inputs — out of scope for the current web-only taxonomy.
+Pruned 2026-09-10. Removed entries and why:
+
+- *Name-based call-site fallback* — implemented per language as D5 (JS
+  import-binding repair) and D7 (C# source-text fallback); see DECISIONS.md.
+- *Chain-level confirmation report* — DONE 2026-07 (D3): `CHAINS_JSON` side
+  output + `scripts/chain_report.py`.
+- *Forward dataflow from sources* / *CFG-based checks for TOCTOU and
+  sanitizer dominance* / *new source kinds* — decided against or deferred;
+  rationale lives in DECISIONS.md ("Decided against / deferred"), not
+  repeated here.
+
+- *Jump-on-Parameter / Jump-on-Field manual traversal* — dropped 2026-09-10:
+  its only real justification was as the candidate fix for the two dataflow
+  gaps in §2, which were dropped the same day (agent layer covers them at
+  the recall ceiling; an engine fix would change no verdict).
+
+**No open items.** This file now documents factual engine/pipeline
+limitations only; future improvement work happens in the LLM/agent layer.

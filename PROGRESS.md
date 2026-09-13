@@ -400,27 +400,22 @@ fallback). Original `scripts/llm_judge.py` renamed to
 - csharp recall holds despite D7 (missing CALL edges into Services/):
   the B-class flaws are visible in the controller bodies alone.
 
-## Next up (do-later round, see DECISIONS.md)
+## Remaining backlog — empty (2026-09-10)
 
-1. ~~Jump-on-Field for JS module-level variables (D5)~~ — DONE (2026-07):
-   the NO_CHAIN root cause was not dataflow but jssrc2cpg resolving
-   require-imported calls (`userService.findStaged`) to GHOST methods in
-   the caller's own file. Fixed with an import-binding call-edge repair in
-   `backward_from_sinks.sc` / `extract_chain_snippets.sc` (a call site
-   `recv.name(...)` with an external callee counts as a caller of the real
-   method when `recv` is an import binding resolving to the method's
-   file). js-sqli-02 10/10. The module-variable DATAFLOW gap in
-   `taint_confirm.sc` remains open (LIMITATIONS §2).
-2. Attach field/variable write sites to chain snippets (D6).
-3. ~~Name-based call-site fallback for missing C# CALL edges (D7)~~ — DONE
-   (2026-07): root cause was narrower than "dropped CALL edges" —
-   csharpsrc2cpg drops the call NODE entirely when `_svc.Method(...)` is
-   nested inside another call (`Ok(_svc.Method())`), so name-based call
-   traversal finds nothing. Implemented a source-text fallback in
-   `backward_from_sinks.sc` / `extract_chain_snippets.sc`: a controller
-   method counts as a caller of service method `m` when its source contains
-   `".<mname>("` AND its declaring type has a member of `m`'s declaring
-   type. 10 LOW_CONFIDENCE edges synthesized, all semantically correct
-   (safe variants map to safe methods, no false edges). cs A 8/10 → 10/10.
-   The `taint_confirm.sc` DATAFLOW side of D7 remains open
-   (LIMITATIONS §2).
+The 2026-07 do-later round is closed — D5 and D7 are RESOLVED (details in
+DECISIONS.md). The two leftovers were re-evaluated 2026-09-10 against the
+project principle (AI SAST: when the LLM layer already covers a gap at the
+recall ceiling, engine-side machinery must justify itself by changed
+verdicts, not elegance) and both were dropped:
+
+- ~~D6 (write sites in chain snippets)~~ — the M3 drill-down playbook covers
+  it dynamically with violation-free evidence; mechanical enrichment would
+  save tokens but change no verdict. See DECISIONS.md D6.
+- ~~taint_confirm.sc dataflow side of D5/D7~~ — the engine DFG still cannot
+  confirm JS module-variable / C# cross-`Services/` flows (factual record
+  kept in LIMITATIONS.md §2), but the agent's manual relay plus verifier
+  covers recall; a fix would only relabel LIKELY→CONFIRMED on those few
+  cases, not change any verdict. Not worth the script complexity.
+
+No open engine-side work items. Future improvement effort goes to the
+LLM/agent layer (directions recorded in AGENT_MVP_PLAN.md §10).
