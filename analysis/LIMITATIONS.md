@@ -112,3 +112,17 @@ Pruned 2026-09-10. Removed entries and why:
 
 **No open items.** This file now documents factual engine/pipeline
 limitations only; future improvement work happens in the LLM/agent layer.
+
+## 5. Language coverage
+
+- **The pipeline assumes both a Semgrep grammar and a Joern frontend per
+  target language.** For a language missing both (e.g. Perl — absent from
+  Semgrep's GA/beta/experimental lists, no Joern frontend), A-class screening
+  dies at CPG build (`ensure_cpg`) and the B-class worker at
+  `get_forward_slice`; only the tree-sitter repo map and the grep/read tools
+  survive. PHP is NOT such a case — Joern ships php2cpg (needs a local PHP
+  runtime) and Semgrep PHP is GA, so PHP would be a full-pipeline (tier-1)
+  addition if ever scheduled. Tiered strategy and the degraded agent-only
+  mode (tier 3) are designed, not implemented:
+  `docs/perl-degraded-mode-design.md`; decision: DECISIONS.md D10
+  (2026-09-14).

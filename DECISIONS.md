@@ -60,6 +60,37 @@ match the safe sqli sample. `taint_confirm.sc` needed no change:
 `request.getParameter` was already a java source and flow attribution is
 file/line-range based. Result: A 10/10, B 7/7, 0 safe FPs (PROGRESS.md).
 
+## Language coverage (2026-09-14)
+
+### D10. Languages without engine frontends (Perl): degraded agent-only mode
+
+Gap: the benchmark may need targets in languages lacking a Semgrep grammar,
+a Joern frontend, or both. Verified 2026-09-14: Semgrep needs a per-language
+grammar (PHP is GA with cross-function dataflow; Perl is absent even from
+the experimental list); Joern actually ships php2cpg (`--language PHP`,
+backed by PHP-Parser and a local PHP runtime) but has no Perl frontend;
+tree-sitter-language-pack bundles both php and perl grammars. So PHP is a
+tier-1 candidate (full pipeline feasible — not scheduled), while Perl is
+tier-3: neither engine can see it — A-class screening dies at
+`ensure_cpg` and the B-class worker at `get_forward_slice`.
+
+Decision: **design only, no code yet** — for tier-3 languages, a degraded
+agent-only mode: (1) a per-language heuristic sink scanner emitting the exact
+`sinks.json` contract (`semgrep_to_sinks.py:39-47`), swapped in via a
+per-target `engines` / `sink_detector` config key; (2) the tree-sitter repo
+map as the only structural index (register perl in `scripts/repo_map.py`);
+(3) A-class investigation seeded from sink records with
+`search_code`/`read_function` grep-relay (the `joern_query` manual-relay
+hint turned primary); (4) a no-joern `get_forward_slice` fallback (repo-map
+symbols + import graph + grep) for the B-class worker, whose planner is
+already Joern-free; (5) metrics tier-labelled and never compared against
+full-pipeline targets. Chosen over transpiling Perl to a supported language
+(semantic chasm — sigils, scalar/list context, magic variables; and the far
+simpler 1:1 JSP transpiler itself was removed 2026-09-05), over writing a
+Joern Perl frontend (cost far exceeds benchmark value), and over Semgrep
+`--lang generic` (line-based, no AST — no stronger than the regex scanner it
+would replace). Full design: `docs/perl-degraded-mode-design.md`.
+
 ## Do now (small change, direct recall gain) — all implemented 2026-07
 
 ### D1. Add route-parameter taint sources (implemented, broadened)
