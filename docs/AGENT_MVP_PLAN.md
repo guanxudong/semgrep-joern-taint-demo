@@ -1,5 +1,12 @@
 # AI SAST Agent MVP 改进计划
 
+> **状态：CLOSED（2026-09-05，M0–M8 全部完成）——历史规格，不再维护。**
+> 执行记录见 `agent/HANDOFF.md` 与 `PROGRESS.md`；后续路线图见根目录
+> `plan.md`；agent/LLM 层已知局限见 `analysis/LIMITATIONS.md` §4。正文
+> 保留原貌作历史参考——"当前有效 target 为 4 个"等说法已过时
+> （2026-09-15 起新增 `targets/python-flask-enterprise/` 试点，
+> DECISIONS.md D11/D12）；§10 的后续方向已并入 `plan.md`。
+
 > **2026-09-05 注**：jsp-legacy target 已按用户决定从仓库删除（含
 > `scripts/jsp_to_java.py`）。本文档中所有 JSP 相关内容（§0 基线行、
 > M6/M7 的 5-target 口径）均为历史记录；当前有效 target 为 4 个

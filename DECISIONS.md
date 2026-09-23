@@ -60,6 +60,63 @@ match the safe sqli sample. `taint_confirm.sc` needed no change:
 `request.getParameter` was already a java source and flow attribution is
 file/line-range based. Result: A 10/10, B 7/7, 0 safe FPs (PROGRESS.md).
 
+## Benchmark realism (2026-09-15)
+
+### D11. Enterprise-grade pilot target, no in-source vuln markers
+
+Gap: the four small targets (~500 LOC, one vuln per handler, `VULN:`/`SAFE:`
+comments above every entry) invite overfitting — vuln density is ~100% of
+handlers, chains are 1-2 hops, and the markers leak into the agent's
+read/search tool output (mitigated only by GT-tag stripping, which itself
+has had bugs).
+
+Decision: build `targets/python-flask-enterprise/` (pilot language chosen
+by the user) as a layered enterprise-style app with deep chains (up to 5
+hops), decorator-gated endpoints, inconsistent sanitizer usage, and 11
+near-miss SAFE mimics; and **drop the `VULN:`/`SAFE:` comment convention
+for this target** — ground truth lives only in `ground_truth.json` +
+`GROUND_TRUTH.md`. The small targets keep their markers (their maintenance
+workflow depends on them, and the strip-machinery already exists).
+External open-source validation repos (WebGoat/JuiceShop-style) were
+considered and deferred to a later phase — pilot first, then measure.
+
+### D12. Entrypoint detection by directory, rule arity fixes
+
+Gap (found by the D11 pilot): joern python entrypoint detection matched
+only `routes/*.py`, so the enterprise target's `api/` layout produced zero
+entrypoints and every chain came out NO_CHAIN; and `sinks-python.yml`
+patterns `eval($X)` / `yaml.load($D)` missed the realistic multi-arg forms
+`eval(expr, globals, locals)` / `yaml.load(data, Loader=...)`.
+
+Decision: widen the detection regex to `(routes|api)/.*\.py$` in the six
+joern scripts (directory convention documented, cheap, zero change for the
+existing targets — verified identical entrypoint extraction on
+python-flask), and add `...` to the eval/exec/yaml.load patterns. Chosen
+over renaming the target's `api/` to `routes/` (the layout difference is
+part of the realism test) and over full decorator-based entrypoint
+detection (more robust but a bigger change; revisit if a future target
+puts routes elsewhere).
+
+## Documentation (2026-09-23)
+
+### D13. Documentation consolidation: one file per role
+
+Gap: the repo root carried six markdown files with overlapping scope, and
+the closed M0–M8 spec (`AGENT_MVP_PLAN.md`) sat beside living documents —
+its §10 future-work partially duplicated `plan.md`, and its header still
+claimed four targets.
+
+Decision: keep exactly one markdown per role — `README.md` (human entry),
+`AGENTS.md` (agent guidance/pointers), `plan.md` (roadmap), `PROGRESS.md`
+(status log), `DECISIONS.md` (decision log), `analysis/LIMITATIONS.md`
+(known gaps + live agent/LLM-layer backlog, §4), `agent/HANDOFF.md`
+(agent-subsystem operations). The closed spec moved to
+`docs/AGENT_MVP_PLAN.md` with a CLOSED banner; its §10 items not covered
+by plan.md M9–M13 (production no-GT operations, CPG platformization)
+moved into plan.md's unscheduled section (cross-scan memory stays
+rejected per `docs/why-not-agent-memory.md`). Problem inventory lives in
+LIMITATIONS.md, scheduling in plan.md — cross-referenced, not merged.
+
 ## Language coverage (2026-09-14)
 
 ### D10. Languages without engine frontends (Perl): degraded agent-only mode

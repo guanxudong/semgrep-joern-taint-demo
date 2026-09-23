@@ -1,7 +1,8 @@
 # SAST Benchmark Targets (Semgrep + Joern + LLM)
 
-Intentionally vulnerable, simplified web projects in four language stacks,
-built to evaluate an **LLM + Semgrep + Joern** SAST
+Intentionally vulnerable, simplified web projects in four language stacks —
+plus a layered enterprise-style pilot (`python-flask-enterprise`) — built
+to evaluate an **LLM + Semgrep + Joern** SAST
 pipeline:
 
 1. **Category A (sink-based)** — Semgrep finds sink call sites; Joern traces
@@ -20,7 +21,10 @@ targets/
 ├── java-spring/        Java + Spring Boot style (@RestController)
 ├── js-ts-express/      Express 4, mixed .js and .ts
 ├── python-flask/       Python + Flask (blueprints)
-└── csharp-aspnet/      C# + ASP.NET Core style controllers
+├── csharp-aspnet/      C# + ASP.NET Core style controllers
+└── python-flask-enterprise/  Enterprise-style pilot: layered api/ → services/
+                              → repositories/ → data/, ~50 endpoints, NO
+                              in-source VULN/SAFE markers (anti-overfitting)
 ```
 
 (The legacy JSP target `jsp-legacy/` was removed on 2026-09-05; it lives on
@@ -31,7 +35,9 @@ Each project contains `routes|controllers/` (entrypoints), `services/`
 secrets), plus **`ground_truth.json`** (machine-readable scoring baseline) and
 **`GROUND_TRUTH.md`** (human-readable table). Every vulnerable handler carries
 a `VULN: <id>` comment matching its ground-truth id; safe counter-examples
-carry `SAFE: <id>`.
+carry `SAFE: <id>`. The enterprise pilot is the exception: its source carries
+no markers — ground truth is the only record (anti-overfitting, DECISIONS.md
+D11).
 
 ## Vulnerability matrix (per project: 17 vulnerable entries + 5 safe)
 
@@ -163,7 +169,7 @@ The same commands work for the other targets — swap the rules file
 ## Autonomous investigation agent (`agent/`)
 
 The `agent/` directory turns the fixed pipeline above into a **pydantic-ai
-investigation agent** (spec: `AGENT_MVP_PLAN.md`, status/handoff:
+investigation agent** (spec: `docs/AGENT_MVP_PLAN.md` — closed, status/handoff:
 `agent/HANDOFF.md`): the Semgrep/Joern stages become tools the agent calls
 on demand, an investigator agent drills into the cases the deterministic
 pipeline leaves UNCONFIRMED (cross-file field stores, module variables),
@@ -182,11 +188,11 @@ uv run --offline agent/run_agent.py --target all
 python3 agent/run_baseline.py --compare
 ```
 
-MVP status (M0–M5 done): category-A recall 10/10 on all five targets with
-0 safe-sample false positives (2026-08-15 full batch regression, gate
-PASS). Details and per-milestone numbers: `PROGRESS.md`,
-`agent/HANDOFF.md`. Category-B agent-ification is the next phase
-(`AGENT_MVP_PLAN.md` §7A, M6–M8).
+MVP status (M0–M8 done, spec closed): category-A recall 10/10 on all four
+small targets with 0 safe-sample false positives; category-B recall 7/7 with
+only the four baseline-known safe-02 FPs (2026-09-05 M8 gate PASS). Details
+and per-milestone numbers: `PROGRESS.md`, `agent/HANDOFF.md`. Post-MVP
+roadmap: `plan.md`.
 
 ## Notes
 

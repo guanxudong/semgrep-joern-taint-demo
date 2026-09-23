@@ -22,6 +22,12 @@ to benchmark an LLM + Semgrep + Joern SAST pipeline.
 - `targets/js-ts-express/` — Express, mixed .js/.ts (source only)
 - `targets/python-flask/` — Flask blueprints (source only)
 - `targets/csharp-aspnet/` — ASP.NET Core style (source only)
+- `targets/python-flask-enterprise/` — enterprise-style pilot ("OrderFlow"
+  B2B order/inventory API, 2026-09-15): layered `api/` blueprints →
+  `services/` → `repositories/` → `data/`, auth decorators, middleware,
+  ~50 endpoints, 19 vulns + 11 safe mimics. **Unlike the four small
+  targets, its source carries NO `VULN:`/`SAFE:` markers** — ground truth
+  is the only record (anti-overfitting measure; see DECISIONS.md D11).
 - Each target has `ground_truth.json` + `GROUND_TRUTH.md` (kept in sync).
   (The fifth target `targets/jsp-legacy/` and its transpiler
   `scripts/jsp_to_java.py` were removed on 2026-09-05 by user decision —
@@ -36,13 +42,15 @@ to benchmark an LLM + Semgrep + Joern SAST pipeline.
   (`taint_confirm.sc`), CPG-derived repo map (`repo_map.sc`; prints one JSON
   object on stdout — joern logs go to stdout too, so pipe through
   `awk '/^\{$/,/^\}$/'`).
-- `analysis/LIMITATIONS.md` — known gaps (source coverage, dataflow-engine
-  limits, pipeline issues) and the pruned ideas backlog (currently empty —
-  engine-side work was dropped 2026-09-10 in favor of the LLM/agent layer;
-  see PROGRESS.md "Remaining backlog"). Read
+- `analysis/LIMITATIONS.md` — known gaps: §§1–3 the factual engine/pipeline
+  record (source coverage, dataflow-engine limits, pipeline issues;
+  engine-side work dropped 2026-09-10), §4 the live agent/LLM-layer
+  backlog (model drift, safe-02 FP, verifier asymmetry, budget truncation,
+  hardcoded coverage assumptions, enterprise validation gap), §5 the
+  pruned engine ideas backlog (empty; roadmap pointer to plan.md). Read
   this first when resuming analysis work in a new session.
-- `plan.md` (repo root) — post-MVP improvement roadmap (M9+), ROI-ordered
-  (2026-09-10).
+- `plan.md` (repo root) — post-MVP improvement roadmap (M9+ scheduled,
+  M14 candidates + unscheduled items; ROI-ordered, updated 2026-09-23).
 - `PROGRESS.md` / `DECISIONS.md` (repo root) — pipeline status/next
   steps, and the optimization decisions (do-now / do-later / deferred) taken
   against those limitations.
@@ -73,8 +81,8 @@ to benchmark an LLM + Semgrep + Joern SAST pipeline.
 - `scripts/compare_repo_maps.py` — scores one or more repo-map JSONs
   (tree-sitter or joern schema) against a `ground_truth.json`: route and
   function hit rates plus coverage stats.
-- `agent/` — MVP investigation agent (spec `AGENT_MVP_PLAN.md`, handoff
-  `agent/HANDOFF.md`): `sast_agent/` package (config/contracts/pipeline/
+- `agent/` — MVP investigation agent (spec `docs/AGENT_MVP_PLAN.md`,
+  closed M0–M8; handoff `agent/HANDOFF.md`): `sast_agent/` package (config/contracts/pipeline/
   tools/investigator/verifier/report/planner/worker), CLI `run_agent.py` (`uv run
   --offline agent/run_agent.py --target <name|all>`; `all` = batch mode,
   parallelism 2, reports under `workspace/agent-reports/<date>/`),
@@ -104,7 +112,9 @@ broken-access-control, auth-flaws), plus 5 negative samples.
 
 When adding/modifying a vulnerability:
 
-1. Keep the `VULN: <id>` / `SAFE: <id>` comment directly above the handler.
+1. Keep the `VULN: <id>` / `SAFE: <id>` comment directly above the handler —
+   **except** in `targets/python-flask-enterprise/`, which deliberately has
+   no in-source markers (anti-overfitting; ground truth is the only record).
 2. Update **both** `ground_truth.json` and `GROUND_TRUTH.md` in that project —
    ids, routes, functions, sink, chain must match the code exactly.
 3. Mirror the change across the other three projects if it is a taxonomic

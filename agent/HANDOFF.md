@@ -1,7 +1,7 @@
 # Agent MVP 进度交接（2026-09-05，M8 完成）
 
-> 给新会话的接续说明。实现规格见 `AGENT_MVP_PLAN.md`（M0–M5 为当前 MVP，
-> M6–M8 是 B 类 agent 化的后续阶段）。本文件记录执行状态，读它 + 计划文件即可继续。
+> 给新会话的接续说明。实现规格见 `docs/AGENT_MVP_PLAN.md`（M0–M8 已全部
+> 关闭，历史文档）。本文件记录执行状态；后续路线图见根目录 `plan.md`。
 
 > **⚠️ jsp-legacy 已于 2026-09-05 从仓库删除**（用户决定，不想覆盖老技术）。
 > `targets/jsp-legacy/` 与 `scripts/jsp_to_java.py` 已 `git rm`（git 历史可

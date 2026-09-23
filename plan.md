@@ -1,15 +1,21 @@
 # AI SAST 自我改进路线图（post-MVP）
 
-> 2026-09-10 制定。M0–M8 已全部关闭（规格 `AGENT_MVP_PLAN.md`，执行记录
+> 2026-09-10 制定。M0–M8 已全部关闭（规格 `docs/AGENT_MVP_PLAN.md`，执行记录
 > `agent/HANDOFF.md`），benchmark 在天花板：A 类 recall 4/4 target 10/10、
 > B 类 7/7、SAFE FP 仅基线自带四个。本计划是 post-MVP 路线图，按 ROI 排序。
+>
+> 2026-09-23 更新：enterprise 试点 `targets/python-flask-enterprise/` 已建
+> （DECISIONS.md D11/D12；确定性基线已冻结，joern 仅 13/25 链 CONFIRMED，
+> LLM judge + agent 全量未跑——见 M14.3）。agent/LLM 层已知局限清单在
+> `analysis/LIMITATIONS.md` §4：问题清单在 LIMITATIONS，排期在本文件，
+> 两者交叉引用、不合并。
 >
 > 指导原则（2026-09-10 确立）：
 > - 这是 AI SAST 项目：**LLM/agent 层优先**；引擎侧工作只有在能改变
 >   verdict 或防正确性漂移时才做（D6、taint_confirm 的 D5/D7 数据流侧已
 >   据此放弃，见 DECISIONS.md 与 PROGRESS.md "Remaining backlog"）。
 > - 一切变更过 `run_baseline.py --compare` 门禁；不改 rules 评分作弊、不改
->   ground_truth、不动 targets 的红线不变（AGENT_MVP_PLAN.md §9）。
+>   ground_truth、不动 targets 的红线不变（`docs/AGENT_MVP_PLAN.md` §9）。
 > - LLM 接出的任何事实（链边、证据）必须带磁盘可解析 ref，过机械校验层。
 
 ## 排序总览
@@ -120,11 +126,38 @@ cs-path-traversal-01），但那是临场发挥；本里程碑把它做成结构
   （`--from-verdicts` vs 新鲜调用），门禁报告区分"模型漂移"与"代码
   变更"，重钉基线走显式 changelog（M0 已被 DeepSeek 漂移咬过两次）。
 
+## M14 候选（2026-09-23 架构讨论，未排期）
+
+来源：漏斗架构复盘（Semgrep 普查 → joern 分级 → LLM 判定 → agent 下钻 →
+对抗复核）。原则：早期阶段只分级、不过滤（joern UNCONFIRMED ≠ 安全，
+只降优先级不丢弃）；LLM 用量与不确定性挂钩，不与代码量挂钩。
+
+- **M14.1 统一编排器**：`run_agent.py` / `run_planner.py` / `run_worker.py`
+  三个 CLI 收进一个 orchestrator，产出一份分阶段漏斗报告（每层的
+  输入/输出/降级原因/tokens 分段统计）——现在是割裂的三份。
+- **M14.2 批量判定三态化 + 模型分层**：batch judge 输出
+  likely-TP / likely-FP / uncertain 三态，只有 uncertain 升级 agent
+  下钻（likely-TP 仍过对抗复核；likely-FP 保守处理——拿不准降置信度，
+  不直接丢弃）；批量初判用便宜模型，下钻/复核才用强模型。对应
+  LIMITATIONS §4 的成本条目——目前最大的成本杠杆。
+- **M14.3 enterprise 全量验证**：LLM judge + agent 全量跑
+  `targets/python-flask-enterprise`（joern 确认率仅 52%，下钻负载目前
+  是外推不是实测；LIMITATIONS §4）。这是 M14.1/M14.2 的首个真实
+  验证场。
+
 ## 依赖关系
 
 - M9.0 是 M9.1–9.4 的前置；M9 与 M10 互相独立，可并行。
 - M12 依赖 M13.1（没有 canary 护栏的改进循环会过拟合，不如不做）。
 - M11 独立，任何时候插进来都只有收益。
+
+## 未排期（自 `docs/AGENT_MVP_PLAN.md` §10 并入，2026-09-23）
+
+- 生产无 ground truth 运营：置信度分级 + 人工分诊反馈回流 + canary 注入
+  测召回；确认的野外漏洞镜像回 benchmark（targets 维护流程见 AGENTS.md）。
+- CPG 构建队列化与增量缓存（平台化）。
+- 跨扫描记忆层：已否决——`docs/why-not-agent-memory.md`；M11.2 的结构化
+  知识库是替代方案。
 
 ## 不做清单（已决策，勿复活）
 
