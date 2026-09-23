@@ -97,6 +97,27 @@ part of the realism test) and over full decorator-based entrypoint
 detection (more robust but a bigger change; revisit if a future target
 puts routes elsewhere).
 
+## Roadmap (2026-09-23)
+
+### D14. Agent productization first; self-evolution deferred
+
+Gap: plan.md carried two orderings — the M9–M13 ROI sequence (benchmark-
+at-ceiling capability work, including the self-evolution class M10/M12)
+and the M14 productization candidates — with no single priority.
+
+Decision (user): make AI SAST agent productization the main line —
+Phase 1: M14.1 unified orchestrator + funnel report → M14.3 enterprise
+full validation → M14.2 tri-state batch judge + model tiering → M9
+drill-down mechanization (target list from M14.3's failure attribution)
+→ M11 knowledge base. Defer the self-evolution class to Phase 2: M10
+rule self-evolution, M12 improvement loop, M13.1 canary guardrail — all
+gated on M14.3's real failure signals. M13.2 model-drift monitoring is
+neither deferred nor scheduled; pull it forward with baseline re-pinning
+needs. Rationale: the benchmark is at ceiling on the four small targets;
+what the project lacks is a runnable, measurable, affordable agent on
+real-shaped code — and self-evolution without real failure signals would
+hill-climb into overfitting the small targets.
+
 ## Documentation (2026-09-23)
 
 ### D13. Documentation consolidation: one file per role

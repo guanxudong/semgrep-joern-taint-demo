@@ -1,4 +1,4 @@
-# AI SAST 自我改进路线图（post-MVP）
+# AI SAST agent 产品化路线图（post-MVP）
 
 > 2026-09-10 制定。M0–M8 已全部关闭（规格 `docs/AGENT_MVP_PLAN.md`，执行记录
 > `agent/HANDOFF.md`），benchmark 在天花板：A 类 recall 4/4 target 10/10、
@@ -10,6 +10,12 @@
 > `analysis/LIMITATIONS.md` §4：问题清单在 LIMITATIONS，排期在本文件，
 > 两者交叉引用、不合并。
 >
+> 2026-09-23 重排（用户决定，DECISIONS.md D14）：主线转为 **AI SAST
+> agent 产品化**——M14 由候选转正为 Phase 1（顺序 M14.1 → M14.3 →
+> M14.2 → M9 → M11）；自进化类（规则自我更新 M10、改进主循环 M12、
+> canary 护栏 M13.1）整体推后为 Phase 2，等 M14.3 产出真实失败归因后
+> 再评估启动。
+>
 > 指导原则（2026-09-10 确立）：
 > - 这是 AI SAST 项目：**LLM/agent 层优先**；引擎侧工作只有在能改变
 >   verdict 或防正确性漂移时才做（D6、taint_confirm 的 D5/D7 数据流侧已
@@ -18,17 +24,37 @@
 >   ground_truth、不动 targets 的红线不变（`docs/AGENT_MVP_PLAN.md` §9）。
 > - LLM 接出的任何事实（链边、证据）必须带磁盘可解析 ref，过机械校验层。
 
-## 排序总览
+## 排序总览（2026-09-23 重排：AI SAST agent 产品化为主线）
 
-| 里程碑 | 主题 | 类型 | 预估 | ROI 理由 |
+主线：把现有 pipeline 整合成可在真实仓库一键运行的 AI SAST agent——
+统一编排 → 实测验证 → 成本可控 → 按实测补效果。自进化类推后（见
+Phase 2）：benchmark 已到顶，先把"能跑、量得准、跑得起"做完。
+
+### Phase 1 — agent 产品化主线
+
+| 顺位 | 里程碑 | 主题 | 预估 | 理由 |
 |---|---|---|---|---|
-| M9 | LLM 断点续链机制化 | 效果 | ~3d | 直接决定新项目/反射/动态分派场景的检出率；M3 已验证过这个模式 |
-| M10 | Semgrep 规则自进化 | 效果 | ~3d | 解决"新项目一开始检测不出、之后永远检测不出"的根因 |
-| M11 | 知识库沉淀 + guard 前置 | 成本 | ~1.5d | verifier 是 token 大头（M4：2.5–4x；M7：9.4M），可复用知识最多 |
-| M12 | 自我改进主循环 | 复利 | ~2.5d | benchmark 已到顶，收益体现在新 target / canary 上 |
-| M13 | 防过拟合护栏 | 护栏 | ~1.5d | M12 的安全前提：没有它，hill-climbing 必然过拟合 4 个靶子 |
+| 1 | M14.1 | 统一编排器 + 分阶段漏斗报告 | ~1.5d | 产品骨架；漏斗报告是解读一切验证结果的仪器 |
+| 2 | M14.3 | enterprise 全量验证 | ~1d + token 预算 | 唯一无过拟合验证场；产出 M9 的目标清单和 M14.2 的成本画像 |
+| 3 | M14.2 | 批量判定三态化 + 模型分层 | ~2d | 最大成本杠杆；enterprise 级反复回归跑得起来的前提 |
+| 4 | M9 | LLM 断点续链机制化 | ~3d | 效果项；按 M14.3 实测失败清单做，不凭小靶子猜 |
+| 5 | M11 | 知识库沉淀 + guard 前置 | ~1.5d | 成本项；独立，任何时候插入都是收益 |
+
+M13.2（模型漂移监控，~0.5d）不推后也不单独立项：随 baseline 重钉需求
+插入，临近生产运营时必做（模型漂移已咬过两次）。
+
+### Phase 2 — 推后（自进化类，启动条件见"依赖关系"）
+
+| 里程碑 | 主题 | 推后理由 |
+|---|---|---|
+| M10 | Semgrep 规则自进化 | 需要 M14.3 的真实漏检信号；四个小靶子上无漏可补 |
+| M12 | 自我改进主循环 | 没有真实失败归因时 hill-climbing 只会过拟合小靶子 |
+| M13.1 | canary 变异测试 | M12 的护栏，随 M12 一起走 |
 
 ## M9 — LLM 断点续链机制化
+
+> 2026-09-23：本里程碑的目标断点形态清单以 M14.3 的 enterprise 实测
+> 失败归因为准，不再仅凭四个小靶子推断。
 
 背景：joern 前端对反射、动态分派、部分语言（C# 嵌套调用、JS require）
 支持差。M3 已证明 agent 能从断点手动接力（js-sqli-02 / cs-cmdi-02 /
@@ -66,7 +92,7 @@ cs-path-traversal-01），但那是临场发挥；本里程碑把它做成结构
 - 验收：4 target 全量回归 recall 不降、0 新 SAFE FP；在 workspace/ 下造
   一个反射/DI 驱动的 canary 场景（不动 targets）验证续链端到端打通。
 
-## M10 — Semgrep 规则自进化
+## M10 — Semgrep 规则自进化（⏸ 推后，Phase 2）
 
 背景：规则是手写的 8 类 sink 形状匹配，新项目用了不认识的库/wrapper/写法
 就永远漏检。进化单元不是"自由生成规则"，而是**分层知识库 + 机械生成器**，
@@ -102,7 +128,7 @@ cs-path-traversal-01），但那是临场发挥；本里程碑把它做成结构
   JSON：条目带 evidence refs + 失效条件（enclosing function 变化即过期），
   以**显式上下文注入**喂给 investigator/verifier——不是隐式记忆。
 
-## M12 — 自我改进主循环（复利）
+## M12 — 自我改进主循环（复利）（⏸ 推后，Phase 2）
 
 - **M12.1 分层失败归因**（~0.5d）：聚合 chain_report / gap 分类 /
   verifier veto 率 / evidence violation 为 per-layer failure taxonomy
@@ -116,7 +142,7 @@ cs-path-traversal-01），但那是临场发挥；本里程碑把它做成结构
   字符串（路由名、函数名），强制变异必须是通用模式。
 - 验收：人工埋一个已知 FN，闭环能定位、修复、过门禁，且不引入新 FP。
 
-## M13 — 防过拟合护栏
+## M13 — 防过拟合护栏（⏸ M13.1 推后，Phase 2；M13.2 见排序总览）
 
 - **M13.1 canary 变异测试**（~1d）：`workspace/` 下生成 targets 的变异
   副本（换变量名、换 wrapper 层级、换框架写法）测召回率——这是泛化能力
@@ -126,30 +152,42 @@ cs-path-traversal-01），但那是临场发挥；本里程碑把它做成结构
   （`--from-verdicts` vs 新鲜调用），门禁报告区分"模型漂移"与"代码
   变更"，重钉基线走显式 changelog（M0 已被 DeepSeek 漂移咬过两次）。
 
-## M14 候选（2026-09-23 架构讨论，未排期）
+## M14 — agent 产品化主线（2026-09-23 由候选转正，Phase 1）
 
 来源：漏斗架构复盘（Semgrep 普查 → joern 分级 → LLM 判定 → agent 下钻 →
 对抗复核）。原则：早期阶段只分级、不过滤（joern UNCONFIRMED ≠ 安全，
 只降优先级不丢弃）；LLM 用量与不确定性挂钩，不与代码量挂钩。
+执行顺序：M14.1 → M14.3 → M14.2。
 
-- **M14.1 统一编排器**：`run_agent.py` / `run_planner.py` / `run_worker.py`
-  三个 CLI 收进一个 orchestrator，产出一份分阶段漏斗报告（每层的
-  输入/输出/降级原因/tokens 分段统计）——现在是割裂的三份。
-- **M14.2 批量判定三态化 + 模型分层**：batch judge 输出
+- **M14.1 统一编排器**（~1.5d）：`run_agent.py` / `run_planner.py` /
+  `run_worker.py` 三个 CLI 收进一个 orchestrator，产出一份分阶段漏斗
+  报告（每层的输入/输出/降级原因/tokens 分段统计）——现在是割裂的
+  三份。验收：`uv run agent/run.py --target <name>` 一条命令跑完
+  A+B 全程，漏斗报告落盘，4 target 回归门禁 PASS。
+- **M14.3 enterprise 全量验证**（~1d + token 预算）：LLM judge + agent
+  全量跑 `targets/python-flask-enterprise`（joern 确认率仅 52%，下钻
+  负载目前是外推不是实测；LIMITATIONS §4）。验收：产出 enterprise 的
+  分层失败归因报告（recall/FP/每层 token 分布），M9 的目标清单与
+  M14.2 的成本画像从这份报告导出。
+- **M14.2 批量判定三态化 + 模型分层**（~2d）：batch judge 输出
   likely-TP / likely-FP / uncertain 三态，只有 uncertain 升级 agent
   下钻（likely-TP 仍过对抗复核；likely-FP 保守处理——拿不准降置信度，
   不直接丢弃）；批量初判用便宜模型，下钻/复核才用强模型。对应
-  LIMITATIONS §4 的成本条目——目前最大的成本杠杆。
-- **M14.3 enterprise 全量验证**：LLM judge + agent 全量跑
-  `targets/python-flask-enterprise`（joern 确认率仅 52%，下钻负载目前
-  是外推不是实测；LIMITATIONS §4）。这是 M14.1/M14.2 的首个真实
-  验证场。
+  LIMITATIONS §4 的成本条目——目前最大的成本杠杆。验收：同等 recall
+  下 enterprise 全量 token 消耗显著下降（基线 = M14.3 实测值），
+  4 target 回归门禁 PASS、0 新 SAFE FP。
 
 ## 依赖关系
 
-- M9.0 是 M9.1–9.4 的前置；M9 与 M10 互相独立，可并行。
-- M12 依赖 M13.1（没有 canary 护栏的改进循环会过拟合，不如不做）。
+- 主线顺序 M14.1 → M14.3 → M14.2 → M9：M14.1 的漏斗报告让 M14.3 的
+  结果可按阶段解读；M14.3 的失败归因同时喂给 M14.2（成本画像）和
+  M9（断点形态清单）。token 预算紧张时 M14.2 可与 M14.3 对调——
+  先控成本再全量跑。
+- M9.0 是 M9.1–9.4 的前置。
 - M11 独立，任何时候插进来都只有收益。
+- Phase 2 启动条件：M10 需要 M14.3 的真实漏检信号；M12 依赖 M13.1
+  （没有 canary 护栏的改进循环会过拟合，不如不做），两者都以 M14.3 的
+  失败归因为前提。推后是顺序安排，不是不做。
 
 ## 未排期（自 `docs/AGENT_MVP_PLAN.md` §10 并入，2026-09-23）
 

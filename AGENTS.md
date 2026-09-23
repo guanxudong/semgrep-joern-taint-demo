@@ -49,8 +49,11 @@ to benchmark an LLM + Semgrep + Joern SAST pipeline.
   hardcoded coverage assumptions, enterprise validation gap), §5 the
   pruned engine ideas backlog (empty; roadmap pointer to plan.md). Read
   this first when resuming analysis work in a new session.
-- `plan.md` (repo root) — post-MVP improvement roadmap (M9+ scheduled,
-  M14 candidates + unscheduled items; ROI-ordered, updated 2026-09-23).
+- `plan.md` (repo root) — roadmap, re-sequenced 2026-09-23 (D14): Phase 1 =
+  AI SAST agent productization (M14.1 orchestrator → M14.3 enterprise
+  validation → M14.2 tri-state judge + model tiering → M9 → M11);
+  Phase 2 = deferred self-evolution (M10 rules, M12 loop, M13.1 canary);
+  plus unscheduled items.
 - `PROGRESS.md` / `DECISIONS.md` (repo root) — pipeline status/next
   steps, and the optimization decisions (do-now / do-later / deferred) taken
   against those limitations.
