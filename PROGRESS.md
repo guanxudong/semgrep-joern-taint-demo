@@ -215,6 +215,47 @@ config/run_baseline TARGETS entries and doc references cleaned. Dormant
 leftovers by design: the `out.print` branch in sinks-java.yml, joern
 `_jspService` detection, and the scorers' `_jsp.java→.jsp` normalization.
 
+## Enterprise target pilot — python-flask-enterprise (2026-09-15)
+
+Motivation: the four small targets (~500 LOC each, ~one vuln per handler,
+`VULN:`/`SAFE:` markers above every entry) risk overfitting the whole
+pipeline. New pilot target `targets/python-flask-enterprise/` ("OrderFlow"
+B2B order/inventory API, ~1500 LOC, 38 files, ~50 endpoints): layered
+`api/` → `services/` → `repositories/` → `data/` chains (up to 5 hops),
+auth decorators (`@require_auth`/`@require_role`), middleware (audit log,
+rate limiter with an auth-blueprint exemption), sanitizer utilities applied
+inconsistently, and realistic near-miss safe variants. 30 ground-truth
+entries: 19 vulns (12 A incl. 2× sqli/xss/cmdi/deserialization, 7 B across
+all classes) + 11 SAFE mimics. **No `VULN:`/`SAFE:` comments in the
+source** (D11) — the small targets' markers leak through the agent's
+read/search tools, so enterprise ground truth lives only in
+`ground_truth.json` + `GROUND_TRUTH.md`.
+
+Pipeline changes forced by the pilot (D12):
+- joern python entrypoint detection was hardcoded to `routes/*.py`; widened
+  to `(routes|api)/*.py` in `backward_from_sinks.sc`,
+  `extract_entrypoint_snippets.sc`, `extract_chain_snippets.sc`,
+  `find_entrypoints.sc`, `forward_from_entrypoints.sc`, `repo_map.sc`.
+  Regression-checked: python-flask entrypoint extraction identical (45/45).
+- `analysis/rules/sinks-python.yml` arity fixes: `eval($X)`→`eval($X, ...)`,
+  `exec($X)`→`exec($X, ...)`, `yaml.load($D)`→`yaml.load($D, ...)` — the
+  strict single-arg patterns missed `eval(expr, globals, locals)` and
+  `yaml.load(data, Loader=...)`, exactly how real code calls them. No
+  finding-count change on the four existing targets.
+
+Deterministic baseline frozen (`run_baseline.py --targets
+python-flask-enterprise --skip-llm`): 20 sinks, 25 chains, **13 CONFIRMED /
+10 UNCONFIRMED / 2 NO_CHAIN** — vs 22/25 CONFIRMED on the small
+python-flask target, i.e. the layered code does stress the dataflow engine
+as intended (UNCONFIRMED = all xxe helper-wrapped flows + the field-staged
+sqli + stored-xss concat; NO_CHAIN = unused `execute_raw` sink + a
+non-HTTP `tasks/jobs.py` sink, both correct noise). LLM judge + agent runs
+pending (separate token budget). External open-source validation set
+(WebGoat/JuiceShop-style) deferred to a later phase per user decision.
+
+Registered in `agent/sast_agent/config.py` and `agent/run_baseline.py`
+TARGETS; note `--target all` batch runs now include it.
+
 ## Done and validated
 
 - `targets/jsp-legacy/` + `scripts/jsp_to_java.py` (2026-07, D8): new

@@ -17,7 +17,7 @@
 // Entrypoint detection is the SAME per-language logic as find_entrypoints.sc:
 //   csharp: [HttpGet]/[HttpPost]/... attributes       route: "VERB /base/sub"
 //   java:   @GetMapping/@PostMapping/... annotations  route: "VERB base/sub"
-//   python: methods in routes/*.py                    route: raw annotation code (best-effort)
+//   python: methods in routes|api/*.py                route: raw annotation code (best-effort)
 //   js/ts:  router.get/post/... calls in routes/.*    route: "VERB /path"
 //
 // Method source comes from whichever is LONGER: a disk slice by line
@@ -83,8 +83,8 @@ val entrypoints: List[(String, String)] = lang match {
       m.fullName -> s"\"/$base.jsp\""
     }
   case "python" =>
-    cpg.file.name("routes/.*\\.py$").ast.isMethod
-      .filter(m => m.fullName.matches("routes/[^:]+:<module>\\.[A-Za-z_][A-Za-z0-9_]*")).l
+    cpg.file.name("(routes|api)/.*\\.py$").ast.isMethod
+      .filter(m => m.fullName.matches("(routes|api)/[^:]+:<module>\\.[A-Za-z_][A-Za-z0-9_]*")).l
       .sortBy(m => (m.file.name.headOption.getOrElse(""), m.lineNumber.getOrElse(-1)))
       .map { m =>
         // pysrc2cpg carries no decorator annotations; keep the raw code as

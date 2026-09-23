@@ -1,0 +1,611 @@
+[
+ {
+  "id": "pye-sqli-01",
+  "category": "A",
+  "vuln_type": "sqli",
+  "cwe": 89,
+  "expected": "vulnerable",
+  "difficulty": "deep",
+  "entrypoint": {
+   "route": "GET /api/v1/users/search",
+   "file": "api/users.py",
+   "function": "search"
+  },
+  "sink": {
+   "file": "data/db.py",
+   "function": "query_raw",
+   "line_hint": "execute(sql)"
+  },
+  "chain": [
+   "api/users.py",
+   "services/user_service.py",
+   "repositories/user_repo.py",
+   "repositories/base.py",
+   "data/db.py"
+  ],
+  "notes": "Taint staged in UserService._pending_search instance field, then interpolated into a LIKE query built in _run_pending_search and executed via the raw_query escape hatch. Field-sensitive analysis required."
+ },
+ {
+  "id": "pye-sqli-02",
+  "category": "A",
+  "vuln_type": "sqli",
+  "cwe": 89,
+  "expected": "vulnerable",
+  "difficulty": "deep",
+  "entrypoint": {
+   "route": "GET /api/v1/orders",
+   "file": "api/orders.py",
+   "function": "list_orders"
+  },
+  "sink": {
+   "file": "data/db.py",
+   "function": "query",
+   "line_hint": "execute(sql, params)"
+  },
+  "chain": [
+   "api/orders.py",
+   "services/order_service.py",
+   "repositories/order_repo.py",
+   "repositories/base.py",
+   "data/db.py"
+  ],
+  "notes": "Client-supplied ?sort= is interpolated into ORDER BY inside BaseRepository.find_where; the rest of the query is parameterized, so the injection is only in the sort fragment."
+ },
+ {
+  "id": "pye-xss-01",
+  "category": "A",
+  "vuln_type": "xss",
+  "cwe": 79,
+  "expected": "vulnerable",
+  "difficulty": "medium",
+  "entrypoint": {
+   "route": "GET /api/v1/reports/preview",
+   "file": "api/reports.py",
+   "function": "preview"
+  },
+  "sink": {
+   "file": "services/report_service.py",
+   "function": "preview_html",
+   "line_hint": "return \"<h2>\""
+  },
+  "chain": [
+   "api/reports.py",
+   "services/report_service.py"
+  ],
+  "notes": "Query params title/note concatenated into an HTML string returned to the client."
+ },
+ {
+  "id": "pye-xss-02",
+  "category": "A",
+  "vuln_type": "xss",
+  "cwe": 79,
+  "expected": "vulnerable",
+  "difficulty": "medium",
+  "entrypoint": {
+   "route": "GET /api/v1/reports/directory",
+   "file": "api/reports.py",
+   "function": "directory"
+  },
+  "sink": {
+   "file": "services/report_service.py",
+   "function": "directory_html",
+   "line_hint": "\"<table"
+  },
+  "chain": [
+   "api/reports.py",
+   "services/report_service.py"
+  ],
+  "notes": "Stored-ish XSS: user-controlled display_name from the users table is f-stringed into table rows without escaping (contrast user_service.render_card, which escapes)."
+ },
+ {
+  "id": "pye-cmdi-01",
+  "category": "A",
+  "vuln_type": "cmdi",
+  "cwe": 78,
+  "expected": "vulnerable",
+  "difficulty": "medium",
+  "entrypoint": {
+   "route": "GET /api/v1/diagnostics/ping",
+   "file": "api/diagnostics.py",
+   "function": "ping"
+  },
+  "sink": {
+   "file": "utils/shell.py",
+   "function": "ping_host",
+   "line_hint": "os.popen"
+  },
+  "chain": [
+   "api/diagnostics.py",
+   "services/diagnostics_service.py",
+   "utils/shell.py"
+  ],
+  "notes": "?host= flows through the service into an f-string os.popen command."
+ },
+ {
+  "id": "pye-cmdi-02",
+  "category": "A",
+  "vuln_type": "cmdi",
+  "cwe": 78,
+  "expected": "vulnerable",
+  "difficulty": "deep",
+  "entrypoint": {
+   "route": "GET /api/v1/diagnostics/trace",
+   "file": "api/diagnostics.py",
+   "function": "trace"
+  },
+  "sink": {
+   "file": "utils/shell.py",
+   "function": "trace_host",
+   "line_hint": "shell=True"
+  },
+  "chain": [
+   "api/diagnostics.py",
+   "services/diagnostics_service.py",
+   "utils/shell.py"
+  ],
+  "notes": "Taint staged in DiagnosticsService._target instance field, read by _run_trace, passed to subprocess.run(..., shell=True). Field-sensitive analysis required."
+ },
+ {
+  "id": "pye-path-traversal-01",
+  "category": "A",
+  "vuln_type": "path-traversal",
+  "cwe": 22,
+  "expected": "vulnerable",
+  "difficulty": "medium",
+  "entrypoint": {
+   "route": "GET /api/v1/files/download",
+   "file": "api/files.py",
+   "function": "download"
+  },
+  "sink": {
+   "file": "api/files.py",
+   "function": "download",
+   "line_hint": "open(path"
+  },
+  "chain": [
+   "api/files.py",
+   "utils/files.py"
+  ],
+  "notes": "resolve_upload_path normpaths but never checks containment, so ../ escapes the upload dir; the open() sink is back in the route after the helper returns."
+ },
+ {
+  "id": "pye-rce-01",
+  "category": "A",
+  "vuln_type": "rce",
+  "cwe": 94,
+  "expected": "vulnerable",
+  "difficulty": "medium",
+  "entrypoint": {
+   "route": "POST /api/v1/reports/computed",
+   "file": "api/reports.py",
+   "function": "computed"
+  },
+  "sink": {
+   "file": "services/report_service.py",
+   "function": "computed_column",
+   "line_hint": "eval(expression"
+  },
+  "chain": [
+   "api/reports.py",
+   "services/report_service.py"
+  ],
+  "notes": "User-supplied reporting expression reaches eval; empty __builtins__ is not a sandbox."
+ },
+ {
+  "id": "pye-xxe-01",
+  "category": "A",
+  "vuln_type": "xxe",
+  "cwe": 611,
+  "expected": "vulnerable",
+  "difficulty": "medium",
+  "entrypoint": {
+   "route": "POST /api/v1/invoices/import",
+   "file": "api/invoices.py",
+   "function": "import_invoice"
+  },
+  "sink": {
+   "file": "api/invoices.py",
+   "function": "_parse_invoice_xml",
+   "line_hint": "resolve_entities=True"
+  },
+  "chain": [
+   "api/invoices.py"
+  ],
+  "notes": "lxml parser with resolve_entities=True and no_network=False parses the request body; contrast _parse_invoice_xml_hardened in the same file."
+ },
+ {
+  "id": "pye-deserialization-01",
+  "category": "A",
+  "vuln_type": "deserialization",
+  "cwe": 502,
+  "expected": "vulnerable",
+  "difficulty": "medium",
+  "entrypoint": {
+   "route": "POST /api/v1/admin/cache/restore",
+   "file": "api/admin.py",
+   "function": "restore_cache"
+  },
+  "sink": {
+   "file": "services/cache_service.py",
+   "function": "restore",
+   "line_hint": "pickle.loads"
+  },
+  "chain": [
+   "api/admin.py",
+   "services/cache_service.py"
+  ],
+  "notes": "Raw request body goes to pickle.loads. Role-gated to admin, but the sink itself is the vulnerability class under test."
+ },
+ {
+  "id": "pye-deserialization-02",
+  "category": "A",
+  "vuln_type": "deserialization",
+  "cwe": 502,
+  "expected": "vulnerable",
+  "difficulty": "shallow",
+  "entrypoint": {
+   "route": "POST /api/v1/webhooks/import",
+   "file": "api/webhooks.py",
+   "function": "import_webhook"
+  },
+  "sink": {
+   "file": "api/webhooks.py",
+   "function": "import_webhook",
+   "line_hint": "yaml.load"
+  },
+  "chain": [
+   "api/webhooks.py"
+  ],
+  "notes": "yaml.load with the unsafe Loader on the request body; the sibling import-json route is the safe counter-example."
+ },
+ {
+  "id": "pye-ssti-01",
+  "category": "A",
+  "vuln_type": "ssti",
+  "cwe": 1336,
+  "expected": "vulnerable",
+  "difficulty": "medium",
+  "entrypoint": {
+   "route": "POST /api/v1/notifications/preview",
+   "file": "api/notifications.py",
+   "function": "preview"
+  },
+  "sink": {
+   "file": "services/notification_service.py",
+   "function": "render_preview",
+   "line_hint": "render_template_string"
+  },
+  "chain": [
+   "api/notifications.py",
+   "services/notification_service.py"
+  ],
+  "notes": "Staff-supplied template text rendered with render_template_string."
+ },
+ {
+  "id": "pye-idor-01",
+  "category": "B",
+  "vuln_type": "idor",
+  "cwe": 639,
+  "expected": "vulnerable",
+  "difficulty": "medium",
+  "entrypoint": {
+   "route": "GET /api/v1/orders/<id>",
+   "file": "api/orders.py",
+   "function": "get_order"
+  },
+  "chain": [
+   "api/orders.py",
+   "services/order_service.py",
+   "repositories/order_repo.py"
+  ],
+  "notes": "Any authenticated user can fetch any order by id; no ownership check (contrast /api/v1/orders/<id>/receipt)."
+ },
+ {
+  "id": "pye-business-logic-01",
+  "category": "B",
+  "vuln_type": "business-logic",
+  "cwe": 840,
+  "expected": "vulnerable",
+  "difficulty": "medium",
+  "entrypoint": {
+   "route": "POST /api/v1/orders",
+   "file": "api/orders.py",
+   "function": "create_order"
+  },
+  "chain": [
+   "api/orders.py",
+   "services/order_service.py",
+   "repositories/order_repo.py"
+  ],
+  "notes": "Client-supplied unit_price is trusted (no server-side price lookup) and negative quantities are accepted, so a negative total credits the buyer; the /quote endpoint shows the intended server-side pricing."
+ },
+ {
+  "id": "pye-race-condition-01",
+  "category": "B",
+  "vuln_type": "race-condition",
+  "cwe": 367,
+  "expected": "vulnerable",
+  "difficulty": "medium",
+  "entrypoint": {
+   "route": "POST /api/v1/inventory/<id>/adjust",
+   "file": "api/inventory.py",
+   "function": "adjust_stock"
+  },
+  "chain": [
+   "api/inventory.py",
+   "services/inventory_service.py",
+   "repositories/product_repo.py"
+  ],
+  "notes": "Check-then-act: stock is read and compared in Python, then written back with set_stock; concurrent requests can oversell. Contrast the atomic /reserve endpoint."
+ },
+ {
+  "id": "pye-priv-esc-01",
+  "category": "B",
+  "vuln_type": "priv-esc",
+  "cwe": 269,
+  "expected": "vulnerable",
+  "difficulty": "shallow",
+  "entrypoint": {
+   "route": "POST /api/v1/admin/promote",
+   "file": "api/admin.py",
+   "function": "promote"
+  },
+  "chain": [
+   "api/admin.py",
+   "services/user_service.py"
+  ],
+  "notes": "Role-change endpoint sits under /api/v1/admin but only carries @require_auth, not @require_role('admin') — any logged-in user can promote anyone."
+ },
+ {
+  "id": "pye-mass-assignment-01",
+  "category": "B",
+  "vuln_type": "mass-assignment",
+  "cwe": 915,
+  "expected": "vulnerable",
+  "difficulty": "medium",
+  "entrypoint": {
+   "route": "PATCH /api/v1/users/me",
+   "file": "api/users.py",
+   "function": "update_me"
+  },
+  "chain": [
+   "api/users.py",
+   "services/user_service.py",
+   "repositories/user_repo.py",
+   "repositories/base.py"
+  ],
+  "notes": "update_profile passes the raw client payload to update_fields, whose column allowlist includes role and is_active, so users can patch their own role. Contrast PATCH /me/profile with its PROFILE_EDITABLE allowlist."
+ },
+ {
+  "id": "pye-broken-access-control-01",
+  "category": "B",
+  "vuln_type": "broken-access-control",
+  "cwe": 862,
+  "expected": "vulnerable",
+  "difficulty": "shallow",
+  "entrypoint": {
+   "route": "GET /api/v1/admin/audit-log",
+   "file": "api/admin.py",
+   "function": "audit_log"
+  },
+  "chain": [
+   "api/admin.py",
+   "data/db.py"
+  ],
+  "notes": "No auth decorator at all on an admin-namespaced endpoint that leaks the full audit trail."
+ },
+ {
+  "id": "pye-auth-flaws-01",
+  "category": "B",
+  "vuln_type": "auth-flaws",
+  "cwe": 287,
+  "expected": "vulnerable",
+  "difficulty": "medium",
+  "entrypoint": {
+   "route": "POST /api/v1/auth/password-reset/request",
+   "file": "api/auth.py",
+   "function": "request_reset"
+  },
+  "chain": [
+   "api/auth.py",
+   "services/auth_service.py",
+   "utils/crypto.py"
+  ],
+  "notes": "Reset token is a 6-digit random.randint code, stored without expiry, and confirm_password_reset allows unlimited attempts; the auth blueprint is also exempt from the rate limiter. Also covers POST /api/v1/auth/password-reset/confirm."
+ },
+ {
+  "id": "pye-safe-01",
+  "category": "A",
+  "vuln_type": "sqli",
+  "cwe": 89,
+  "expected": "safe",
+  "entrypoint": {
+   "route": "GET /api/v1/users/<id>",
+   "file": "api/users.py",
+   "function": "get_user"
+  },
+  "chain": [
+   "api/users.py",
+   "services/user_service.py",
+   "repositories/user_repo.py",
+   "repositories/base.py",
+   "data/db.py"
+  ],
+  "notes": "Parameterized find_by_id; mimics sqli."
+ },
+ {
+  "id": "pye-safe-02",
+  "category": "A",
+  "vuln_type": "sqli",
+  "cwe": 89,
+  "expected": "safe",
+  "entrypoint": {
+   "route": "GET /api/v1/inventory/search",
+   "file": "api/inventory.py",
+   "function": "search_products"
+  },
+  "chain": [
+   "api/inventory.py",
+   "repositories/product_repo.py",
+   "data/db.py"
+  ],
+  "notes": "Parameterized LIKE query; mimics pye-sqli-01."
+ },
+ {
+  "id": "pye-safe-03",
+  "category": "A",
+  "vuln_type": "xss",
+  "cwe": 79,
+  "expected": "safe",
+  "entrypoint": {
+   "route": "GET /api/v1/users/<id>/card",
+   "file": "api/users.py",
+   "function": "user_card"
+  },
+  "chain": [
+   "api/users.py",
+   "services/user_service.py"
+  ],
+  "notes": "HTML card built with escape_html on every user-controlled field; mimics pye-xss-02."
+ },
+ {
+  "id": "pye-safe-04",
+  "category": "A",
+  "vuln_type": "cmdi",
+  "cwe": 78,
+  "expected": "safe",
+  "entrypoint": {
+   "route": "GET /api/v1/diagnostics/dns",
+   "file": "api/diagnostics.py",
+   "function": "dns"
+  },
+  "chain": [
+   "api/diagnostics.py",
+   "services/diagnostics_service.py",
+   "utils/shell.py"
+  ],
+  "notes": "subprocess with argv list and shell=False; mimics pye-cmdi-01/02."
+ },
+ {
+  "id": "pye-safe-05",
+  "category": "A",
+  "vuln_type": "path-traversal",
+  "cwe": 22,
+  "expected": "safe",
+  "entrypoint": {
+   "route": "GET /api/v1/files/avatar/<name>",
+   "file": "api/files.py",
+   "function": "avatar"
+  },
+  "chain": [
+   "api/files.py",
+   "utils/files.py"
+  ],
+  "notes": "resolve_avatar_path enforces basename + containment under the avatar dir; mimics pye-path-traversal-01."
+ },
+ {
+  "id": "pye-safe-06",
+  "category": "A",
+  "vuln_type": "xxe",
+  "cwe": 611,
+  "expected": "safe",
+  "entrypoint": {
+   "route": "POST /api/v1/invoices/preview-xml",
+   "file": "api/invoices.py",
+   "function": "preview_invoice"
+  },
+  "chain": [
+   "api/invoices.py"
+  ],
+  "notes": "Parser created with resolve_entities=False, no_network=True; mimics pye-xxe-01."
+ },
+ {
+  "id": "pye-safe-07",
+  "category": "A",
+  "vuln_type": "deserialization",
+  "cwe": 502,
+  "expected": "safe",
+  "entrypoint": {
+   "route": "POST /api/v1/webhooks/import-json",
+   "file": "api/webhooks.py",
+   "function": "import_webhook_json"
+  },
+  "chain": [
+   "api/webhooks.py",
+   "utils/validators.py"
+  ],
+  "notes": "json.loads plus explicit field validation; mimics pye-deserialization-02."
+ },
+ {
+  "id": "pye-safe-08",
+  "category": "B",
+  "vuln_type": "idor",
+  "cwe": 639,
+  "expected": "safe",
+  "entrypoint": {
+   "route": "GET /api/v1/orders/<id>/receipt",
+   "file": "api/orders.py",
+   "function": "get_receipt"
+  },
+  "chain": [
+   "api/orders.py",
+   "services/order_service.py",
+   "repositories/order_repo.py"
+  ],
+  "notes": "Ownership enforced via find_by_id_and_user(order_id, g.user['id']); mimics pye-idor-01."
+ },
+ {
+  "id": "pye-safe-09",
+  "category": "B",
+  "vuln_type": "race-condition",
+  "cwe": 367,
+  "expected": "safe",
+  "entrypoint": {
+   "route": "POST /api/v1/inventory/<id>/reserve",
+   "file": "api/inventory.py",
+   "function": "reserve_stock"
+  },
+  "chain": [
+   "api/inventory.py",
+   "services/inventory_service.py",
+   "repositories/product_repo.py"
+  ],
+  "notes": "Single conditional UPDATE ... WHERE stock >= ?; mimics pye-race-condition-01."
+ },
+ {
+  "id": "pye-safe-10",
+  "category": "B",
+  "vuln_type": "mass-assignment",
+  "cwe": 915,
+  "expected": "safe",
+  "entrypoint": {
+   "route": "PATCH /api/v1/users/me/profile",
+   "file": "api/users.py",
+   "function": "update_me_profile"
+  },
+  "chain": [
+   "api/users.py",
+   "services/user_service.py",
+   "repositories/user_repo.py"
+  ],
+  "notes": "Payload filtered through the PROFILE_EDITABLE allowlist before update_fields; mimics pye-mass-assignment-01."
+ },
+ {
+  "id": "pye-safe-11",
+  "category": "A",
+  "vuln_type": "ssti",
+  "cwe": 1336,
+  "expected": "safe",
+  "entrypoint": {
+   "route": "POST /api/v1/notifications/send-welcome",
+   "file": "api/notifications.py",
+   "function": "send_welcome"
+  },
+  "chain": [
+   "api/notifications.py",
+   "services/notification_service.py",
+   "templates/welcome.html"
+  ],
+  "notes": "Fixed template file with context variables only; mimics pye-ssti-01."
+ }
+]

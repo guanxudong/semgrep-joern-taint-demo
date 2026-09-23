@@ -59,7 +59,7 @@ def languageOf(path: String): String = path.split('.').last match {
 def roleOf(path: String): String = {
   val p = path.toLowerCase
   if (p.contains("test")) "test"
-  else if (p.contains("routes/")) "route"
+  else if (p.contains("routes/") || p.contains("api/")) "route"
   else if (p.contains("controllers/")) "controller"
   else if (p.contains("services/")) "service"
   else if (p.contains("data/") || p.contains("db/")) "data"
@@ -188,7 +188,7 @@ val routes: List[(String, String, String, String, Int)] = lang match {
     }.toMap.withDefaultValue("")
     val topFn = methodsOf _ andThen (ms => ms.filter(m =>
       m.fullName.matches(".*:<module>\\.[A-Za-z_][A-Za-z0-9_]*")))
-    cpg.call.nameExact("route").where(_.file.name("routes/.*\\.py$")).l.flatMap { c =>
+    cpg.call.nameExact("route").where(_.file.name("(routes|api)/.*\\.py$")).l.flatMap { c =>
       for {
         f <- c.file.name.headOption
         cline <- c.lineNumber

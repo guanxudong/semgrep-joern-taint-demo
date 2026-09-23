@@ -24,8 +24,8 @@ rules:
     message: Dynamic code evaluation (potential RCE sink)
     metadata: { vuln_type: rce, cwe: "94" }
     pattern-either:
-      - pattern: eval($X)
-      - pattern: exec($X)
+      - pattern: eval($X, ...)
+      - pattern: exec($X, ...)
 
   - id: py-sink-path-traversal
     languages: [python]
@@ -55,7 +55,7 @@ rules:
     pattern-either:
       - pattern: pickle.loads($D)
       - pattern: pickle.load($D)
-      - pattern: yaml.load($D)
+      - pattern: yaml.load($D, ...)
       - pattern: marshal.loads($D)
 
   - id: py-sink-ssti

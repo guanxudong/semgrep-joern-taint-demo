@@ -41,8 +41,8 @@ val entrypoints: List[(String, String)] = lang match {
       m.fullName -> s"${m.typeDecl.name.headOption.getOrElse("?")} $ann"
     } ++ jspEntrypoints
   case "python" =>
-    cpg.file.name("routes/.*\\.py$").ast.isMethod
-      .filter(m => m.fullName.matches("routes/[^:]+:<module>\\.[A-Za-z_][A-Za-z0-9_]*")).l
+    cpg.file.name("(routes|api)/.*\\.py$").ast.isMethod
+      .filter(m => m.fullName.matches("(routes|api)/[^:]+:<module>\\.[A-Za-z_][A-Za-z0-9_]*")).l
       .map(m => m.fullName -> m.fullName)
   case _ =>
     cpg.call.name("(?i)^(get|post|put|delete|patch)$").where(_.file.name("routes/.*")).l.flatMap { c =>

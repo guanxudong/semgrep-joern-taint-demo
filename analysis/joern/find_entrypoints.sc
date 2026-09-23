@@ -4,7 +4,7 @@
 //   joern --script analysis/joern/find_entrypoints.sc <cpg.bin> [> entrypoints.jsonl]
 //
 // Works for all four targets:
-//   python-flask  : methods defined in routes/*.py (route path is best-effort)
+//   python-flask  : methods defined in routes|api/*.py (route path is best-effort)
 //   java-spring   : methods with @GetMapping/@PostMapping/... annotations
 //   js-ts-express : router.get/post/... call sites; handler is the <lambda>N via METHOD_REF
 //   csharp-aspnet : methods with [HttpGet]/[HttpPost]/... attributes
@@ -48,8 +48,8 @@ lang match {
     }
 
   case "python" =>
-    cpg.file.name("routes/.*\\.py$").ast.isMethod
-      .filter(m => m.fullName.matches("routes/[^:]+:<module>\\.[A-Za-z_][A-Za-z0-9_]*")).l
+    cpg.file.name("(routes|api)/.*\\.py$").ast.isMethod
+      .filter(m => m.fullName.matches("(routes|api)/[^:]+:<module>\\.[A-Za-z_][A-Za-z0-9_]*")).l
       .sortBy(m => (m.file.name.headOption.getOrElse(""), m.lineNumber.getOrElse(-1)))
       .foreach { m =>
         val route = m.annotation.code.headOption.getOrElse("?")

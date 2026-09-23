@@ -94,6 +94,11 @@ TARGETS = {
         "tree": "targets/python-flask",
         "ground_truth": "targets/python-flask/ground_truth.json",
     },
+    "python-flask-enterprise": {
+        "rules": "analysis/rules/sinks-python.yml",
+        "tree": "targets/python-flask-enterprise",
+        "ground_truth": "targets/python-flask-enterprise/ground_truth.json",
+    },
     "java-spring": {
         "rules": "analysis/rules/sinks-java.yml",
         "tree": "targets/java-spring",
