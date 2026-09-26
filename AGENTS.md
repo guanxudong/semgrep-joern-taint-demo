@@ -25,9 +25,21 @@ to benchmark an LLM + Semgrep + Joern SAST pipeline.
 - `targets/python-flask-enterprise/` — enterprise-style pilot ("OrderFlow"
   B2B order/inventory API, 2026-09-15): layered `api/` blueprints →
   `services/` → `repositories/` → `data/`, auth decorators, middleware,
-  ~50 endpoints, 19 vulns + 11 safe mimics. **Unlike the four small
-  targets, its source carries NO `VULN:`/`SAFE:` markers** — ground truth
-  is the only record (anti-overfitting measure; see DECISIONS.md D11).
+  ~50 endpoints, 19 vulns + 11 safe mimics.
+- `targets/php-laravel/` — Laravel-style PHP (source only, 2026-09-26).
+  Engines: Semgrep GA + Joern php2cpg (needs a PHP runtime; less mature) —
+  a tier-1 target for testing the full pipeline on a weaker frontend
+  (DECISIONS.md D15). Not yet registered in the agent pipeline.
+- `targets/perl-mojo/` — Mojolicious-style Perl (source only, 2026-09-26).
+  **Neither Semgrep nor Joern supports Perl** — a tier-3 target for the
+  no-engine degraded mode (design: `docs/perl-degraded-mode-design.md`,
+  DECISIONS.md D10/D15). Not yet registered in the agent pipeline.
+- **No target carries in-source ground-truth markers.** Since 2026-09-26
+  (DECISIONS.md D15) the `VULN:`/`SAFE:` comment convention is retired
+  everywhere, and source comments must never reveal a vulnerability's
+  presence, class, or dataflow role — the LLM reads the source, so
+  `ground_truth.json` + `GROUND_TRUTH.md` are the only record
+  (anti-overfitting; the enterprise pilot started this as D11).
 - Each target has `ground_truth.json` + `GROUND_TRUTH.md` (kept in sync).
   (The fifth target `targets/jsp-legacy/` and its transpiler
   `scripts/jsp_to_java.py` were removed on 2026-09-05 by user decision —
@@ -115,12 +127,14 @@ broken-access-control, auth-flaws), plus 5 negative samples.
 
 When adding/modifying a vulnerability:
 
-1. Keep the `VULN: <id>` / `SAFE: <id>` comment directly above the handler —
-   **except** in `targets/python-flask-enterprise/`, which deliberately has
-   no in-source markers (anti-overfitting; ground truth is the only record).
+1. **Never** put `VULN:`/`SAFE:` markers or any comment that hints at a
+   vulnerability's presence, class, mechanism, or dataflow role in the
+   source — the LLM reads the source, so comments must be neutral and
+   functional only (DECISIONS.md D15). Identifiers are referenced by the
+   ground truth, so rename them only together with the ground truth.
 2. Update **both** `ground_truth.json` and `GROUND_TRUTH.md` in that project —
    ids, routes, functions, sink, chain must match the code exactly.
-3. Mirror the change across the other three projects if it is a taxonomic
+3. Mirror the change across the other projects if it is a taxonomic
    change (same `vuln_type` set everywhere).
 4. Validate: `python3 -m json.tool <project>/ground_truth.json` and, for
    Python files, `python3 -m py_compile`.
@@ -129,6 +143,12 @@ When adding/modifying a vulnerability:
 
 - Python: `python3 -m py_compile` all `.py` in the target.
 - JS: `node --check` all `.js` in the target (TS is verified via joern-parse).
+- PHP: `php -l` all `.php` if a PHP runtime is installed; otherwise a
+  `semgrep targets/php-laravel` parse check suffices.
+- Perl: `perl -c -Ilib` per file; `Can't locate ... in @INC` (uninstalled
+  CPAN modules) is acceptable, syntax errors are not.
 - All: `python3 -m json.tool` on each `ground_truth.json`.
 - Parse check: `joern-parse targets/<name> --output /tmp/<name>.cpg.bin` must
-  succeed; `semgrep targets/<name>` must run without parse errors.
+  succeed; `semgrep targets/<name>` must run without parse errors —
+  **except `perl-mojo`**, which neither engine supports by design (that is
+  what the target tests).

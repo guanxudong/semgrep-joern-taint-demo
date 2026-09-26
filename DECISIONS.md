@@ -75,8 +75,8 @@ by the user) as a layered enterprise-style app with deep chains (up to 5
 hops), decorator-gated endpoints, inconsistent sanitizer usage, and 11
 near-miss SAFE mimics; and **drop the `VULN:`/`SAFE:` comment convention
 for this target** — ground truth lives only in `ground_truth.json` +
-`GROUND_TRUTH.md`. The small targets keep their markers (their maintenance
-workflow depends on them, and the strip-machinery already exists).
+`GROUND_TRUTH.md`. ~~The small targets keep their markers~~ (superseded
+by D15 on 2026-09-26: markers retired everywhere).
 External open-source validation repos (WebGoat/JuiceShop-style) were
 considered and deferred to a later phase — pilot first, then measure.
 
@@ -96,6 +96,42 @@ over renaming the target's `api/` to `routes/` (the layout difference is
 part of the realism test) and over full decorator-based entrypoint
 detection (more robust but a bigger change; revisit if a future target
 puts routes elsewhere).
+
+## Answer-leak hardening + new-language targets (2026-09-26)
+
+### D15. No in-source markers anywhere; new PHP (tier-1) and Perl (tier-3) targets
+
+Gap: although the LLM judges and agent tool layer strip `VULN:`/`SAFE:`
+marker comments (`_GT_TAG` regex in `llm_judge_sink_chains.py`,
+`llm_judge_entrypoints.py`, `sast_agent/investigator.py`), the stripping
+is path-dependent and the four small targets also carried *descriptive*
+spoiler comments ("Sink: executes a SQL string...", "No validation of
+amount sign -> negative amount steals money", "attacker fires many
+concurrent requests here") that no stripping rule covered — any read of
+the raw source handed the LLM the answers.
+
+Decision (user): retire the in-source marker convention in ALL targets
+(supersedes the "small targets keep their markers" clause of D11) and
+scrub every spoiler comment — marker lines deleted, flaw-explaining
+comments deleted or reworded to neutral functional descriptions (~100
+marker lines + ~50 spoiler comments across 64 files; code, identifiers,
+and ground truth untouched). The `_GT_TAG` stripping machinery stays as
+harmless defense-in-depth. Suggestive identifiers (`query_unsafe` etc.)
+were kept because ground truth references them; renaming is only allowed
+together with a ground-truth update (recorded in AGENTS.md).
+
+Same decision round: two new targets for engine-coverage testing —
+`targets/php-laravel/` (Laravel-style, 22-entry mirror of the small
+targets, `php-` ids; Semgrep GA + Joern php2cpg, so tier-1 full-pipeline
+with a weaker frontend; corrects the assumption that Joern lacks PHP —
+php2cpg exists but needs a PHP runtime) and `targets/perl-mojo/`
+(Mojolicious-style, 22-entry mirror, `pl-` ids; no Semgrep grammar, no
+Joern frontend — the tier-3 no-engine degraded-mode case of D10). Both
+follow the no-marker rule from birth and use neutral identifiers (safe
+variants named `searchV2`/`search_prepared` etc., not `*_safe`). Pipeline
+registration (`config.py` TARGETS, `run_baseline.py`, `sinks-php.yml`,
+`.sc` PHP branches, `perl_sinks.py`, repo_map perl/php support, `engines`
+flags) is deliberately NOT done yet — that is the D10 §6 integration work.
 
 ## Roadmap (2026-09-23)
 

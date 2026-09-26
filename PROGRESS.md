@@ -4,6 +4,23 @@ Status of the Semgrep + Joern taint-confirmation pipeline as of 2026-07.
 Companion docs: `LIMITATIONS.md` (known gaps), `DECISIONS.md` (what we
 decided to do about them).
 
+## New targets + answer-leak scrub (2026-09-26)
+
+- **D15 scrub**: all in-source `VULN:`/`SAFE:` markers and spoiler comments
+  removed from the four small targets (comment-only diff: 64 files, ~67
+  insertions / ~182 deletions). Verified: `py_compile`, `node --check`,
+  `joern-parse` × 4, semgrep rule runs × 4 (0 parse errors), repo_map
+  `--check` 22/22 routes + 22/22 functions on python-flask. Code semantics
+  unchanged, so the frozen M0 baseline stays valid for chain/sink counts;
+  LLM-facing snippets now differ (no markers), so the next agent/judge runs
+  are the first leak-free measurements.
+- **New targets** (not yet wired into the agent pipeline — registration is
+  D10 §6 follow-up work): `targets/php-laravel/` (Laravel-style, 22 entries,
+  `php-` ids; semgrep parses clean, `php` runtime absent so no `php -l`) and
+  `targets/perl-mojo/` (Mojolicious-style, 22 entries, `pl-` ids; `perl -c`
+  syntax OK via stubs, engines N/A by design). Both marker-free with neutral
+  identifiers; ground truth cross-checked against code programmatically.
+
 ## Agent MVP — M0 baseline frozen (2026-08)
 
 `agent/run_baseline.py` (part of the `AGENT_MVP_PLAN.md` milestones) runs the
