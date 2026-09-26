@@ -17,9 +17,12 @@ decided to do about them).
 - **New targets** (not yet wired into the agent pipeline — registration is
   D10 §6 follow-up work): `targets/php-laravel/` (Laravel-style, 22 entries,
   `php-` ids; semgrep parses clean, `php` runtime absent so no `php -l`) and
-  `targets/perl-mojo/` (Mojolicious-style, 22 entries, `pl-` ids; `perl -c`
-  syntax OK via stubs, engines N/A by design). Both marker-free with neutral
-  identifiers; ground truth cross-checked against code programmatically.
+  `targets/perl-cgi/` (legacy CGI.pm style — `cgi-bin/*.pl` one script per
+  action, routes by filename convention; 22 entries, `pl-` ids; `perl -c`
+  syntax OK for 29/30 files with missing-module stubs, engines N/A by
+  design; replaced an initially-built Mojolicious variant `perl-mojo` per
+  user decision). Both marker-free with neutral identifiers; ground truth
+  cross-checked against code programmatically.
 
 ## Agent MVP — M0 baseline frozen (2026-08)
 

@@ -1,6 +1,10 @@
 # Perl 降级模式设计:无引擎语言接入 benchmark 的方案
 
 日期:2026-09-14 · 状态:**仅设计,未实施** · 决策记录:DECISIONS.md D10
+· 更新(2026-09-26, D15):目标已按本文落地,但形态为 **CGI.pm 遗留风格**
+`targets/perl-cgi/`(用户指定,替换最初建成的 Mojolicious 变体)——
+路由走文件名约定而非 `$r->get(...)`;§3.5 的 Mojolicious 路由提取
+相应变为 CGI 文件提取,其余降级架构不变。
 
 本文回答:当目标语言缺少 Semgrep grammar 和/或 Joern frontend 时(以 Perl
 为实例),如何接入本 benchmark 管线。本轮只产出设计,不改管线代码。

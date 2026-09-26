@@ -124,14 +124,21 @@ Same decision round: two new targets for engine-coverage testing —
 `targets/php-laravel/` (Laravel-style, 22-entry mirror of the small
 targets, `php-` ids; Semgrep GA + Joern php2cpg, so tier-1 full-pipeline
 with a weaker frontend; corrects the assumption that Joern lacks PHP —
-php2cpg exists but needs a PHP runtime) and `targets/perl-mojo/`
-(Mojolicious-style, 22-entry mirror, `pl-` ids; no Semgrep grammar, no
-Joern frontend — the tier-3 no-engine degraded-mode case of D10). Both
+php2cpg exists but needs a PHP runtime) and `targets/perl-cgi/` (legacy CGI.pm style, one `.pl` script per action
+under `cgi-bin/`, routes by filename convention, 22-entry mirror, `pl-`
+ids; no Semgrep grammar, no Joern frontend — the tier-3 no-engine
+degraded-mode case of D10). Both
 follow the no-marker rule from birth and use neutral identifiers (safe
 variants named `searchV2`/`search_prepared` etc., not `*_safe`). Pipeline
 registration (`config.py` TARGETS, `run_baseline.py`, `sinks-php.yml`,
 `.sc` PHP branches, `perl_sinks.py`, repo_map perl/php support, `engines`
 flags) is deliberately NOT done yet — that is the D10 §6 integration work.
+
+Amendment (same day, user decision): the initially-built Mojolicious-style
+`targets/perl-mojo/` was deleted and replaced by `targets/perl-cgi/` —
+the user needs a LEGACY CGI.pm-style project (flat `cgi-bin/*.pl` scripts,
+CGI.pm param parsing, `print` HTML output), the shape of the old Perl web
+apps this tier-3 target is meant to represent.
 
 ## Roadmap (2026-09-23)
 

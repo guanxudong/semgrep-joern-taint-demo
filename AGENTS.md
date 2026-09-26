@@ -30,10 +30,13 @@ to benchmark an LLM + Semgrep + Joern SAST pipeline.
   Engines: Semgrep GA + Joern php2cpg (needs a PHP runtime; less mature) —
   a tier-1 target for testing the full pipeline on a weaker frontend
   (DECISIONS.md D15). Not yet registered in the agent pipeline.
-- `targets/perl-mojo/` — Mojolicious-style Perl (source only, 2026-09-26).
-  **Neither Semgrep nor Joern supports Perl** — a tier-3 target for the
-  no-engine degraded mode (design: `docs/perl-degraded-mode-design.md`,
-  DECISIONS.md D10/D15). Not yet registered in the agent pipeline.
+- `targets/perl-cgi/` — legacy CGI.pm-style Perl (source only, 2026-09-26):
+  one `.pl` script per action under `cgi-bin/` (routes are the script paths
+  by filename convention, e.g. `cgi-bin/users/search.pl` →
+  `/users/search.pl`), plain-OO services under `lib/MyApp/`. **Neither
+  Semgrep nor Joern supports Perl** — a tier-3 target for the no-engine
+  degraded mode (design: `docs/perl-degraded-mode-design.md`, DECISIONS.md
+  D10/D15). Not yet registered in the agent pipeline.
 - **No target carries in-source ground-truth markers.** Since 2026-09-26
   (DECISIONS.md D15) the `VULN:`/`SAFE:` comment convention is retired
   everywhere, and source comments must never reveal a vulnerability's
@@ -150,5 +153,5 @@ When adding/modifying a vulnerability:
 - All: `python3 -m json.tool` on each `ground_truth.json`.
 - Parse check: `joern-parse targets/<name> --output /tmp/<name>.cpg.bin` must
   succeed; `semgrep targets/<name>` must run without parse errors —
-  **except `perl-mojo`**, which neither engine supports by design (that is
+  **except `perl-cgi`**, which neither engine supports by design (that is
   what the target tests).
