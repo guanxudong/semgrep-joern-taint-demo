@@ -7,7 +7,6 @@ namespace BadDemo.Controllers
     [Route("render")]
     public class RenderController : ControllerBase
     {
-        // VULN: cs-ssti-01 (ssti, cwe-1336) [medium]
         [HttpPost("preview")]
         public IActionResult Preview([FromBody] PreviewRequest req)
         {
@@ -16,7 +15,6 @@ namespace BadDemo.Controllers
             return Content(html, "text/html");
         }
 
-        // VULN: cs-xss-01 (xss, cwe-79) [shallow]
         [HttpGet("hello")]
         public IActionResult Hello([FromQuery] string name)
         {

@@ -16,7 +16,6 @@ import org.xml.sax.InputSource;
 @RequestMapping("/xml")
 public class XmlController {
 
-    // VULN: java-xxe-01 (xxe, cwe-611) [shallow]
     @PostMapping("/parse")
     public String parse(@RequestBody String xml) throws Exception {
         DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
@@ -25,7 +24,6 @@ public class XmlController {
         return doc.getDocumentElement().getTextContent();
     }
 
-    // SAFE: java-safe-03 (mimics xxe) - DTD and external entities disabled
     @PostMapping("/parse_safe")
     public String parseSafe(@RequestBody String xml) throws Exception {
         DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();

@@ -18,21 +18,18 @@ public class ToolController {
 
     private final ToolService toolService = new ToolService();
 
-    // VULN: java-cmdi-01 (cmdi, cwe-78) [shallow]
     @GetMapping("/ping")
     public String ping(@RequestParam String host) throws Exception {
         Process p = Runtime.getRuntime().exec("ping -c 1 " + host);
         return "rc=" + p.waitFor();
     }
 
-    // VULN: java-cmdi-02 (cmdi, cwe-78) [deep, taint via instance field]
     @GetMapping("/diagnose")
     public String diagnose(@RequestParam String host) throws Exception {
         toolService.stageTarget(host);
         return "rc=" + toolService.runStagedDiag();
     }
 
-    // VULN: java-rce-01 (rce, cwe-94) [shallow]
     @PostMapping("/calc")
     public String calc(@RequestBody String expr) throws Exception {
         ScriptEngine engine = new ScriptEngineManager().getEngineByName("JavaScript");

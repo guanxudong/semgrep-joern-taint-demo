@@ -18,7 +18,7 @@ namespace BadDemo.Controllers
             public string Role = "user";
         }
 
-        /// <summary>Request DTO includes Role -> binding it wholesale is dangerous.</summary>
+        /// <summary>Profile update request data.</summary>
         public class UpdateProfileRequest
         {
             public string Username { get; set; } = "";
@@ -28,8 +28,6 @@ namespace BadDemo.Controllers
 
         private static readonly Dictionary<string, User> Users = new Dictionary<string, User>();
 
-        // VULN: cs-mass-assignment-01 (mass-assignment, cwe-915)
-        // VULN: cs-priv-esc-01 (priv-esc, cwe-269) - role accepted from body and persisted
         [HttpPost("update")]
         public IActionResult UpdateProfile([FromBody] UpdateProfileRequest req)
         {
@@ -43,7 +41,6 @@ namespace BadDemo.Controllers
             return Ok(user);
         }
 
-        // VULN: cs-deserialization-01 (deserialization, cwe-502) [medium]
         [HttpPost("import")]
         public IActionResult ImportProfile([FromBody] string b64)
         {

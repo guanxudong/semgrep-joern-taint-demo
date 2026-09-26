@@ -1,4 +1,4 @@
-// Diagnostic command logic; taint stored in a field between calls.
+// Diagnostic command logic; the target is staged in a field between calls.
 const { exec } = require('child_process');
 
 class ToolService {
@@ -8,7 +8,7 @@ class ToolService {
     this.target = host;
   }
 
-  // Reads the staged field and reaches the shell sink (deep chain end).
+  // Runs ping against the staged target.
   runStagedDiag(cb: (err: unknown, out: string) => void): void {
     exec('ping -c 1 ' + this.target, (err, stdout) => cb(err, stdout));
   }

@@ -1,14 +1,14 @@
-// User lookup logic; holds tainted input in a module-level field between calls.
+// User lookup logic; a name can be staged in a module-level field between calls.
 const db = require('../db/index');
 
-// Tainted value staged by the route (taint via module field).
+// Value staged by the route before lookup.
 let pendingName = '';
 
 function stageName(name) {
   pendingName = name;
 }
 
-// Reads the staged field and reaches the sink (deep chain end).
+// Looks up the staged name.
 function findStaged(cb) {
   const sql = "SELECT id, username, email FROM users WHERE username = '" + pendingName + "'";
   db.query(sql, cb);

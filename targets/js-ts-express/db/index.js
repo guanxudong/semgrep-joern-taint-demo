@@ -1,4 +1,4 @@
-// Raw mysql data-access helpers. query() is the SQLi sink.
+// Raw mysql data-access helpers.
 const mysql = require('mysql2');
 const config = require('../config');
 

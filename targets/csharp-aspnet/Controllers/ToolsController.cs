@@ -11,7 +11,6 @@ namespace BadDemo.Controllers
     {
         private readonly ToolService _toolService = new ToolService();
 
-        // VULN: cs-cmdi-01 (cmdi, cwe-78) [shallow]
         [HttpGet("ping")]
         public IActionResult Ping([FromQuery] string host)
         {
@@ -20,7 +19,6 @@ namespace BadDemo.Controllers
             return Ok(proc.ExitCode);
         }
 
-        // VULN: cs-cmdi-02 (cmdi, cwe-78) [deep, taint via instance field]
         [HttpGet("diagnose")]
         public IActionResult Diagnose([FromQuery] string host)
         {
@@ -28,7 +26,6 @@ namespace BadDemo.Controllers
             return Ok(_toolService.RunStagedDiag());
         }
 
-        // VULN: cs-rce-01 (rce, cwe-94) [shallow]
         [HttpPost("calc")]
         public IActionResult Calc([FromBody] CalcRequest req)
         {

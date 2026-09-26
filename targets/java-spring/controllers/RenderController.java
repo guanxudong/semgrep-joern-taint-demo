@@ -17,7 +17,6 @@ import freemarker.template.Template;
 @RequestMapping("/render")
 public class RenderController {
 
-    // VULN: java-ssti-01 (ssti, cwe-1336) [medium]
     @PostMapping("/preview")
     public String preview(@RequestBody String tpl) throws Exception {
         Configuration cfg = new Configuration(Configuration.VERSION_2_3_31);
@@ -27,7 +26,6 @@ public class RenderController {
         return out.toString();
     }
 
-    // VULN: java-xss-01 (xss, cwe-79) [shallow]
     @GetMapping("/hello")
     public String hello(@RequestParam String name) {
         return "<h1>Hello " + name + "</h1>";

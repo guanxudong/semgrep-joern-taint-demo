@@ -9,14 +9,12 @@ namespace BadDemo.Controllers
     {
         private readonly UserRepository _repo = new UserRepository();
 
-        // VULN: cs-broken-access-control-01 (broken-access-control, cwe-862)
         [HttpGet("users")]
         public IActionResult ListAllUsers()
         {
             return Ok(_repo.QueryUnsafe("SELECT id, username, email, role FROM users"));
         }
 
-        // VULN: cs-broken-access-control-01 (broken-access-control, cwe-862)
         [HttpDelete("users/{id}")]
         public IActionResult DeleteUser(string id)
         {

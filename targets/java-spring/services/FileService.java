@@ -10,7 +10,7 @@ public class FileService {
 
     private static final Set<String> ALLOWED = Set.of("readme.txt", "help.txt");
 
-    /** Passes user-controlled name down to the filesystem helper (sink hop). */
+    /** Passes the requested name down to the filesystem helper. */
     public String readUserFile(String name) throws Exception {
         return FileUtil.read(AppConfig.UPLOAD_DIR, name);
     }

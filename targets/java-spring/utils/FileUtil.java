@@ -3,7 +3,7 @@ package com.baddemo.utils;
 import java.io.File;
 import java.nio.file.Files;
 
-/** Filesystem helper (deep-chain path traversal sink). */
+/** Filesystem helper. */
 public class FileUtil {
 
     public static String read(String baseDir, String name) throws Exception {

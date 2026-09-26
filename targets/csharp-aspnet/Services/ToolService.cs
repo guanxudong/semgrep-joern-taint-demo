@@ -2,10 +2,10 @@ using System.Diagnostics;
 
 namespace BadDemo.Services
 {
-    /// <summary>Diagnostic command logic; taint stored in a field between calls.</summary>
+    /// <summary>Diagnostic command logic; the target is stored in a field between calls.</summary>
     public class ToolService
     {
-        /// <summary>Tainted value staged by the controller (taint via field).</summary>
+        /// <summary>Target staged by the controller between calls.</summary>
         private string _target = "";
 
         public void StageTarget(string host)
@@ -13,7 +13,7 @@ namespace BadDemo.Services
             _target = host;
         }
 
-        /// <summary>Reads the staged field and reaches the shell sink (deep chain end).</summary>
+        /// <summary>Runs the ping diagnostic against the staged target.</summary>
         public int RunStagedDiag()
         {
             var proc = Process.Start("cmd.exe", "/c ping " + _target);

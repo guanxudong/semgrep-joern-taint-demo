@@ -3,12 +3,12 @@ using BadDemo.Data;
 
 namespace BadDemo.Services
 {
-    /// <summary>User lookup logic; holds tainted input in an instance field between calls.</summary>
+    /// <summary>User lookup logic; holds the last staged name in an instance field between calls.</summary>
     public class UserService
     {
         private readonly UserRepository _repo = new UserRepository();
 
-        /// <summary>Tainted value staged by the controller (taint via field).</summary>
+        /// <summary>Name staged by the controller between calls.</summary>
         private string _pendingName = "";
 
         public void StageName(string name)
@@ -16,7 +16,7 @@ namespace BadDemo.Services
             _pendingName = name;
         }
 
-        /// <summary>Reads the staged field and reaches the sink (deep chain end).</summary>
+        /// <summary>Looks up the staged name.</summary>
         public SqlDataReader FindStaged()
         {
             var sql = "SELECT id, username, email FROM users WHERE username = '" + _pendingName + "'";

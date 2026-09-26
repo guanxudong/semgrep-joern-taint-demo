@@ -2,7 +2,7 @@ using System.Collections.Generic;
 
 namespace BadDemo.Services
 {
-    /// <summary>Order / wallet logic with deliberate business-logic and race flaws.</summary>
+    /// <summary>Order / wallet logic.</summary>
     public class OrderService
     {
         private static readonly Dictionary<string, double> Balances = new Dictionary<string, double>
@@ -11,7 +11,6 @@ namespace BadDemo.Services
             { "bob", 1000.0 }
         };
 
-        /// <summary>No validation of amount sign -> negative amount steals money.</summary>
         public double Transfer(string src, string dst, double amount)
         {
             Balances[src] = Balances.GetValueOrDefault(src) - amount;
@@ -19,7 +18,6 @@ namespace BadDemo.Services
             return Balances[src];
         }
 
-        /// <summary>Coupon is never marked as used -> unlimited reuse.</summary>
         public bool ApplyCoupon(string user, string coupon)
         {
             if (coupon == "SAVE50")
@@ -30,13 +28,12 @@ namespace BadDemo.Services
             return false;
         }
 
-        /// <summary>Check-then-act without any lock -> race condition (TOCTOU).</summary>
+        /// <summary>Checks the balance, then deducts the requested amount.</summary>
         public bool Withdraw(string user, double amount)
         {
             var balance = Balances.GetValueOrDefault(user);
             if (balance >= amount)
             {
-                // attacker fires many concurrent requests here
                 Balances[user] = balance - amount;
                 return true;
             }

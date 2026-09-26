@@ -7,7 +7,7 @@ ALLOWED_FILES = {"readme.txt", "help.txt"}
 
 
 def read_user_file(name):
-    """Concatenates user-controlled name into a filesystem path (sink)."""
+    """Concatenates the given name into a filesystem path."""
     path = os.path.join(config.UPLOAD_DIR, name)
     with open(path, "r") as f:
         return f.read()

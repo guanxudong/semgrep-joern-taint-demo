@@ -3,7 +3,7 @@ using BadDemo.Config;
 
 namespace BadDemo.Data
 {
-    /// <summary>Raw ADO.NET data access. The unsafe methods are the SQLi sinks.</summary>
+    /// <summary>Raw ADO.NET data access.</summary>
     public class UserRepository
     {
         private SqlConnection Connect()
@@ -11,7 +11,7 @@ namespace BadDemo.Data
             return new SqlConnection(AppConfig.ConnectionString);
         }
 
-        /// <summary>Sink: executes a SQL string built by callers via concatenation.</summary>
+        /// <summary>Executes a SQL string provided by callers.</summary>
         public SqlDataReader QueryUnsafe(string sql)
         {
             var conn = Connect();

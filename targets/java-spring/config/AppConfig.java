@@ -1,6 +1,6 @@
 package com.baddemo.config;
 
-/** Application configuration. Secrets are hardcoded on purpose (demo target). */
+/** Application configuration. */
 public class AppConfig {
     public static final String JWT_SECRET = "secret";
     public static final String DB_URL = "jdbc:mysql://localhost:3306/baddemo";

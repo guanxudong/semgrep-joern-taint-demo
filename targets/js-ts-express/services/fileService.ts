@@ -5,7 +5,7 @@ import * as path from 'path';
 const UPLOAD_DIR = '/var/www/uploads';
 const ALLOWED = new Set(['readme.txt', 'help.txt']);
 
-// Passes user-controlled name into a filesystem path (sink).
+// Reads the named file from the upload directory.
 export function readUserFile(name: string): string {
   const p = path.join(UPLOAD_DIR, name);
   return fs.readFileSync(p, 'utf-8');

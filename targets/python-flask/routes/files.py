@@ -1,4 +1,4 @@
-"""File download routes: path traversal plus a whitelisted variant."""
+"""File download routes."""
 from flask import Blueprint, request, jsonify
 
 from services import file_service
@@ -6,7 +6,6 @@ from services import file_service
 files_bp = Blueprint("files", __name__, url_prefix="/files")
 
 
-# VULN: py-path-traversal-01 (path-traversal, cwe-22) [medium]
 @files_bp.route("/download")
 def download():
     name = request.args.get("name", "")
@@ -14,7 +13,6 @@ def download():
     return jsonify({"content": content})
 
 
-# SAFE: py-safe-04 (mimics path-traversal) - whitelist validation
 @files_bp.route("/download_safe")
 def download_safe():
     name = request.args.get("name", "")

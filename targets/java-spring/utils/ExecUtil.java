@@ -1,6 +1,6 @@
 package com.baddemo.utils;
 
-/** Shell execution helper (deep-chain command injection sink). */
+/** Shell execution helper. */
 public class ExecUtil {
 
     public static int run(String cmd) throws Exception {

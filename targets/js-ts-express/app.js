@@ -1,4 +1,4 @@
-// Entry point: mounts all routers (overview of all HTTP entrypoints).
+// Entry point: mounts all routers.
 const express = require('express');
 
 const usersRouter = require('./routes/users');

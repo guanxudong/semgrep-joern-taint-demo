@@ -1,4 +1,4 @@
-// Application configuration. Secrets are hardcoded on purpose (demo target).
+// Application configuration.
 module.exports = {
   JWT_SECRET: 'secret',
   DB_HOST: 'localhost',

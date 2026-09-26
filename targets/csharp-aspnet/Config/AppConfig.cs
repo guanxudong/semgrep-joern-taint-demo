@@ -1,6 +1,6 @@
 namespace BadDemo.Config
 {
-    /// <summary>Application configuration. Secrets are hardcoded on purpose (demo target).</summary>
+    /// <summary>Application configuration and shared constants.</summary>
     public static class AppConfig
     {
         public const string JwtSecret = "secret";

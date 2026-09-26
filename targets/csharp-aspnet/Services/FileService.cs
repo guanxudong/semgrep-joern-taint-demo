@@ -9,7 +9,7 @@ namespace BadDemo.Services
     {
         private static readonly HashSet<string> Allowed = new HashSet<string> { "readme.txt", "help.txt" };
 
-        /// <summary>Concatenates user-controlled name into a filesystem path (sink).</summary>
+        /// <summary>Reads a file from the upload directory by name.</summary>
         public string ReadUserFile(string name)
         {
             var path = Path.Combine(AppConfig.UploadDir, name);

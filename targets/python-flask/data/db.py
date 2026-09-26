@@ -9,7 +9,7 @@ def get_conn():
 
 
 def query_unsafe(sql):
-    """Execute a raw SQL string built by the caller (sink for sqli chains)."""
+    """Execute a raw SQL string built by the caller."""
     conn = get_conn()
     try:
         cur = conn.cursor()

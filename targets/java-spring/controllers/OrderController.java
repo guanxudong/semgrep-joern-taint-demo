@@ -15,7 +15,6 @@ public class OrderController {
 
     private final OrderService orderService = new OrderService();
 
-    // VULN: java-business-logic-01 (business-logic, cwe-840) - negative amount accepted
     @PostMapping("/transfer")
     public String transfer(@RequestBody Map<String, Object> body) {
         double balance = orderService.transfer(
@@ -24,14 +23,12 @@ public class OrderController {
         return "balance=" + balance;
     }
 
-    // VULN: java-business-logic-01 (business-logic, cwe-840) - coupon never invalidated
     @PostMapping("/coupon")
     public String coupon(@RequestBody Map<String, String> body) {
         boolean ok = orderService.applyCoupon(body.get("user"), body.get("coupon"));
         return "applied=" + ok;
     }
 
-    // VULN: java-race-condition-01 (race-condition, cwe-367)
     @PostMapping("/withdraw")
     public String withdraw(@RequestBody Map<String, Object> body) {
         boolean ok = orderService.withdraw(
@@ -39,7 +36,6 @@ public class OrderController {
         return "ok=" + ok;
     }
 
-    // SAFE: java-safe-05 (mimics race-condition) - synchronized withdraw
     @PostMapping("/withdraw_safe")
     public String withdrawSafe(@RequestBody Map<String, Object> body) {
         boolean ok = orderService.withdrawSafe(

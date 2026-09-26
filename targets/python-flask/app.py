@@ -1,4 +1,4 @@
-"""Entry point: registers all blueprints (overview of all HTTP entrypoints)."""
+"""Entry point: registers all blueprints."""
 from flask import Flask
 
 from routes.users import users_bp

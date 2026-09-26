@@ -18,17 +18,14 @@ import com.baddemo.config.AppConfig;
 @RequestMapping("/auth")
 public class AuthController {
 
-    // VULN: java-auth-flaws-01 (auth-flaws, cwe-287)
     @PostMapping("/login")
     public String login(@RequestBody Map<String, String> body) {
         String username = body.get("username");
-        // no lockout / rate limiting; any credentials issue a token
         Algorithm alg = Algorithm.HMAC256(AppConfig.JWT_SECRET);
         return JWT.create().withSubject(username).withClaim("role", "user")
                 .withIssuedAt(new Date()).sign(alg);
     }
 
-    // VULN: java-auth-flaws-01 (auth-flaws, cwe-287) - predictable reset token
     @PostMapping("/reset")
     public String requestReset(@RequestBody Map<String, String> body) throws Exception {
         String username = body.get("username");

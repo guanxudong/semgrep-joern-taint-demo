@@ -1,4 +1,4 @@
-"""Diagnostic command helpers; taint stored in a field between calls."""
+"""Diagnostic command helpers."""
 import os
 
 

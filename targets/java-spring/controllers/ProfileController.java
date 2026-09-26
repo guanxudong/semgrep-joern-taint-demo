@@ -24,8 +24,6 @@ public class ProfileController {
 
     private static final Map<String, User> USERS = new HashMap<>();
 
-    // VULN: java-mass-assignment-01 (mass-assignment, cwe-915)
-    // VULN: java-priv-esc-01 (priv-esc, cwe-269) - role accepted from body and persisted
     @PostMapping("/update")
     public User updateProfile(@RequestBody Map<String, Object> body) throws Exception {
         String username = (String) body.get("username");
@@ -37,7 +35,6 @@ public class ProfileController {
         return user;
     }
 
-    // VULN: java-deserialization-01 (deserialization, cwe-502) [medium]
     @PostMapping("/import")
     public String importProfile(@RequestBody String b64) throws Exception {
         byte[] data = Base64.getDecoder().decode(b64);

@@ -4,19 +4,19 @@ import java.sql.ResultSet;
 
 import com.baddemo.data.UserRepository;
 
-/** User lookup logic; holds tainted input in an instance field between calls. */
+/** User lookup logic. */
 public class UserService {
 
     private final UserRepository repo = new UserRepository();
 
-    /** Tainted value staged by the controller (taint via field). */
+    /** Value staged by the controller. */
     private String pendingName;
 
     public void stageName(String name) {
         this.pendingName = name;
     }
 
-    /** Reads the staged field and reaches the sink (deep chain end). */
+    /** Looks up the staged name. */
     public ResultSet findStaged() throws Exception {
         String sql = "SELECT id, username, email FROM users WHERE username = '" + this.pendingName + "'";
         return repo.queryUnsafe(sql);

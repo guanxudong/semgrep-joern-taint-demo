@@ -8,7 +8,6 @@ namespace BadDemo.Controllers
     [Route("xml")]
     public class XmlController : ControllerBase
     {
-        // VULN: cs-xxe-01 (xxe, cwe-611) [shallow]
         [HttpPost("parse")]
         public IActionResult Parse([FromBody] string xml)
         {
@@ -23,7 +22,6 @@ namespace BadDemo.Controllers
             return Ok(doc.DocumentElement.InnerText);
         }
 
-        // SAFE: cs-safe-03 (mimics xxe) - DTD prohibited
         [HttpPost("parse_safe")]
         public IActionResult ParseSafe([FromBody] string xml)
         {

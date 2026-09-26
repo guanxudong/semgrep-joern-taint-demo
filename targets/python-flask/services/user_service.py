@@ -1,4 +1,4 @@
-"""User lookup logic; holds tainted input in an instance field between calls."""
+"""User lookup logic."""
 from data import db
 
 
@@ -7,11 +7,11 @@ class UserService:
         self._pending_name = ""
 
     def stage_name(self, name):
-        """Store user-controlled input in a field (taint via field)."""
+        """Store the given name in a field."""
         self._pending_name = name
 
     def find_staged(self):
-        """Reads the staged field and reaches the sink (deep chain end)."""
+        """Read the staged field and run the lookup."""
         sql = "SELECT id, username, email FROM users WHERE username = '%s'" % self._pending_name
         return db.query_unsafe(sql)
 

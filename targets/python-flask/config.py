@@ -1,4 +1,4 @@
-"""Application configuration. Secrets are hardcoded on purpose (demo target)."""
+"""Application configuration."""
 
 JWT_SECRET = "secret"
 DB_PATH = "/tmp/baddemo.db"

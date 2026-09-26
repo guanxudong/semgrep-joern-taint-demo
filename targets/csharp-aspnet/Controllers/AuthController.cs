@@ -12,11 +12,9 @@ namespace BadDemo.Controllers
     [Route("auth")]
     public class AuthController : ControllerBase
     {
-        // VULN: cs-auth-flaws-01 (auth-flaws, cwe-287)
         [HttpPost("login")]
         public IActionResult Login([FromBody] LoginRequest req)
         {
-            // no lockout / rate limiting; any credentials issue a token
             var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(AppConfig.JwtSecret.PadRight(32, 'x')));
             var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
             var token = new JwtSecurityToken(
@@ -26,7 +24,6 @@ namespace BadDemo.Controllers
             return Ok(new JwtSecurityTokenHandler().WriteToken(token));
         }
 
-        // VULN: cs-auth-flaws-01 (auth-flaws, cwe-287) - predictable reset token
         [HttpPost("reset")]
         public IActionResult RequestReset([FromBody] LoginRequest req)
         {
