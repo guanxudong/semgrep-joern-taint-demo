@@ -107,9 +107,14 @@ for each item: PROGRESS.md (M0–M8 entries) and `agent/HANDOFF.md`.
 - **Judgment-layer model drift.** DeepSeek endpoint drift has flipped
   verdicts (A-class FNs java-cmdi-01/02; safe-02 flipped to FP on 4
   targets) and forced a baseline re-pin (2026-08). Every LLM verdict is
-  model-version-sensitive; the regression gate only tolerates
-  baseline-known drift, so a silent model change can mask a real
-  regression or manufacture a fake one.
+  model-version-sensitive. *Update 2026-10-04 (D16):* the gate no longer
+  reports drift as an undifferentiated recall drop — `baseline.json` v2
+  records model/base_url plus an engine + judge-script + snippet
+  fingerprint, and every FAIL names MODEL_DRIFT / CODE_CHANGED /
+  SNIPPET_CHANGED / ENGINE_CHANGED / JUDGE_CHANGED, else REAL_REGRESSION.
+  What is still missing: drift *within* a pinned model version (a silent
+  endpoint change behind the same model name) is invisible to any hash —
+  that is what M13.2's periodic judge-only re-run is for.
 - **Persistent known FP: safe-02 (all targets).** The ownership-checked
   IDOR sample is FP'd by the B-class judge/worker on every target
   (baseline-known, tolerated by the gate). Unsolved.
@@ -120,7 +125,10 @@ for each item: PROGRESS.md (M0–M8 entries) and `agent/HANDOFF.md`.
 - **Cost and budget truncation.** The B-class worker runs ~2M+ tokens per
   target; WORKER_MAX_TOOL_CALLS=15 and per-investigation timeouts truncate
   deep investigations and force LIKELY-with-gaps submissions. This is the
-  main precision ceiling as targets scale up.
+  main precision ceiling as targets scale up. *Update 2026-10-04 (D16):*
+  cost is now measurable per run (`--max-token-delta`, and the funnel
+  numbers M14.3 will collect), but nothing yet *reduces* it — that is
+  M14.2.
 - **Hardcoded coverage assumptions.** Python entrypoint detection assumes
   a `(routes|api)/*.py` layout (widened for the enterprise pilot, D12);
   the planner's trait→class mappings are framework-specific. New
@@ -128,12 +136,22 @@ for each item: PROGRESS.md (M0–M8 entries) and `agent/HANDOFF.md`.
   unexamined routes visible but does not examine them.
 - **Benchmark hygiene is a class of issue, not a fixed bug.** Tool-output
   channels keep finding new GT-label leak paths (M7 acceptance:
-  line-numbered rg output bypassed the anchored strip regex). Every new
-  tool or output format must have the strip verified against it.
+  line-numbered rg output bypassed the anchored strip regex). *Update
+  2026-10-04 (D16):* the guard is no longer a bare regex — one scrubber
+  (`agent/sast_agent/scrub.py`) covers every known marker shape and
+  ASSERTS that nothing survived (certain → `GroundTruthLeak`, the run
+  fails; suspected → `workspace/leak-audit.jsonl`), with fixtures in
+  `tests/fixtures/leak/` and an offline `--check-leak` on both judges.
+  The class stays open because a *new* output format can always introduce a
+  new shape; what changed is that such a shape now fails loudly instead of
+  passing quietly.
 - **Enterprise validation gap.** On the layered python-flask-enterprise
   target joern confirms only 13/25 chains (52%), and the LLM judge + full
   agent run is still pending — drill-down load on real-world code is
-  extrapolated from the small targets, not measured.
+  extrapolated from the small targets, not measured. *Update 2026-10-04
+  (D16):* the gate used to fail unconditionally on this target (no judge
+  baseline, since it was frozen `--skip-llm`); it now reports SKIP, which
+  is honest — the target is measured by nothing until the re-pin.
 
 ## 5. Ideas backlog (engine side)
 

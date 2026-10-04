@@ -101,12 +101,18 @@ to benchmark an LLM + Semgrep + Joern SAST pipeline.
   function hit rates plus coverage stats.
 - `agent/` — MVP investigation agent (spec `docs/AGENT_MVP_PLAN.md`,
   closed M0–M8; handoff `agent/HANDOFF.md`): `sast_agent/` package (config/contracts/pipeline/
-  tools/investigator/verifier/report/planner/worker), CLI `run_agent.py` (`uv run
+  scrub/tools/investigator/verifier/report/planner/worker), CLI `run_agent.py` (`uv run
   --offline agent/run_agent.py --target <name|all>`; `all` = batch mode,
   parallelism 2, reports under `workspace/agent-reports/<date>/`),
   `run_baseline.py` (M0 baseline freezer; `--compare` = regression gate
-  against `workspace/baseline/baseline.json`, auto-detects A-class
-  `summary.json` vs B-class `summary_b.json`), `run_planner.py` (M6
+  against `workspace/baseline/baseline.json` (v2: `{version, provenance,
+  targets}`), auto-detects A-class `summary.json` vs B-class
+  `summary_b.json`; verdicts PASS/SKIP/FAIL where SKIP = "not comparable"
+  and never fails unless `--require-baseline`; every FAIL names its cause
+  — MODEL_DRIFT / CODE_CHANGED / SNIPPET_CHANGED / ENGINE_CHANGED /
+  JUDGE_CHANGED, else REAL_REGRESSION — and optional dimensions
+  `--max-token-delta PCT` (vs the previous same-shape batch),
+  `--min-confirmed-rate PCT`, `--forbid-leak`), `run_planner.py` (M6
   category-B planner: hypothesis queue per target to
   `workspace/agent-cache/<target>/hypotheses.jsonl` + post-run ground-truth
   route-coverage check; M8: also emits a per-class taxonomy coverage
@@ -118,6 +124,23 @@ to benchmark an LLM + Semgrep + Joern SAST pipeline.
   (`smoke_tools.py`, `smoke_verifier.py`, `smoke_m8.py`). Same DeepSeek env
   as the LLM judges. Agent tools must never read `ground_truth.json` /
   `GROUND_TRUTH.md` (hard-refused) nor write under `targets/`.
+- `agent/sast_agent/scrub.py` — the **single** ground-truth scrubber
+  (red line §9.2, DECISIONS.md D16). `strip_gt_tags()` removes every known
+  marker shape; `scrub()` strips then ASSERTS nothing label-shaped survived
+  — certain hit → appended to `workspace/leak-audit.jsonl` and
+  `GroundTruthLeak` raised (the run fails); suspected (a bare
+  `<lang>-<type>-<nn>` id) → audited only. Never reads ground truth: the id
+  shape is a hardcoded regex. Wired into `SastTools.read_function` /
+  `search_code` / `get_chain_snippets` / `get_forward_slice` (covers
+  investigator, worker, verifier) and both judges' `build_prompt`; both
+  judges also accept `--check-leak` to build every prompt and assert offline
+  (no API key). Fixtures for the shapes: `tests/fixtures/leak/` (the
+  targets themselves are marker-free since D15 and cannot serve as
+  fixtures).
+- `tests/` — no-LLM test suite: `uv run --with pytest pytest tests -q`
+  (scrubber + regression gate, including the gate's self-tests on fabricated
+  summaries). No API key, no joern, no CPG needed. Anything that can be
+  checked without an LLM belongs here rather than in a smoke script.
 
 ## Vulnerability taxonomy
 
@@ -144,6 +167,14 @@ When adding/modifying a vulnerability:
 
 ## Testing changes
 
+- **Repo code (always, no LLM):** `uv run --with pytest pytest tests -q`
+  and `python3 agent/run_baseline.py --compare <summary.json>`. A change to
+  a prompt, a tool, the scrubber or the gate must keep the suite green;
+  `--compare` is the only gate that sees LLM verdicts.
+- **Leak check (no LLM):** `uv run scripts/llm_judge_sink_chains.py
+  --check-leak --snippets <snips.jsonl> --ground-truth targets/<t>/ground_truth.json`
+  (and the entrypoints variant with `--snippets <ep_snippets.jsonl>`). Runs
+  in CI/without an API key; non-zero exit on a leak.
 - Python: `python3 -m py_compile` all `.py` in the target.
 - JS: `node --check` all `.js` in the target (TS is verified via joern-parse).
 - PHP: `php -l` all `.php` if a PHP runtime is installed; otherwise a

@@ -13,7 +13,6 @@ Usage:
 
 import json
 import os
-import re
 import subprocess
 import sys
 from pathlib import Path
@@ -21,21 +20,12 @@ from pathlib import Path
 from . import config, pipeline
 from .contracts import (B_VULN_TYPES, BFinding, Finding, Hypothesis, Sink,
                         TaxonomyEntry)
+from .scrub import scrub, scrub_dicts
 
 REPO = config.REPO
 
 # Red line §9.2: never readable through any tool.
 GROUND_TRUTH_NAMES = {"ground_truth.json", "GROUND_TRUTH.md"}
-
-# Ground-truth marker comments (`// VULN: id` / `# SAFE: id`) must never
-# reach the LLM (red line §9.2) — same pattern as investigator._GT_TAG
-# (tag portion dropped anywhere on the line, so prefixed output like
-# read_function's numbered lines is covered too).
-_GT_TAG = re.compile(r"(?://|#)\s*(?:VULN|SAFE):[^\n]*")
-
-
-def _strip_gt_tags(code: str) -> str:
-    return _GT_TAG.sub("", code)
 
 REPO_MAP_MAX_CHARS = 4000
 SEARCH_MAX_LINES = 100
@@ -197,8 +187,16 @@ class SastTools:
         return flow.model_dump() if flow else {"confirmed": False, "flows": []}
 
     def get_chain_snippets(self, sink_id: str, force: bool = False) -> list[dict]:
-        """Source snippets of every method on the sink's chains."""
-        return pipeline.get_chain_snippets(self.target, sink_key=sink_id, force=force)
+        """Source snippets of every method on the sink's chains.
+
+        Ground-truth labels are scrubbed here (single choke point, scrub.py)
+        rather than at each caller, so a new caller cannot forget."""
+        records = pipeline.get_chain_snippets(self.target, sink_key=sink_id,
+                                              force=force)
+        for rec in records or []:
+            scrub_dicts(rec.get("snippets", []), where="tools.get_chain_snippets",
+                        target=self.target)
+        return records or []
 
     # ---- drill-down tools (dynamic investigation) ----
 
@@ -218,7 +216,10 @@ class SastTools:
         end = min(end, len(lines))
         if start > end:
             return f"ERROR: no lines in range {start}..{end} ({file} has {len(lines)})"
-        return "\n".join(f"{i:>4}: {lines[i - 1]}" for i in range(start, end + 1))
+        numbered = "\n".join(f"{i:>4}: {lines[i - 1]}"
+                             for i in range(start, end + 1))
+        return scrub(numbered, where=f"tools.read_function:{file}",
+                     target=self.target)
 
     def search_code(self, pattern: str, glob: str | None = None) -> str:
         """ripgrep under the target tree (±2 lines of context, ~100 lines
@@ -236,7 +237,9 @@ class SastTools:
         lines = proc.stdout.splitlines()
         if len(lines) > SEARCH_MAX_LINES:
             lines = lines[:SEARCH_MAX_LINES] + ["... [truncated]"]
-        return "\n".join(lines) if lines else "(no matches)"
+        out = "\n".join(lines) if lines else "(no matches)"
+        return scrub(out, where=f"tools.search_code:{pattern}",
+                     target=self.target)
 
     def joern_query(self, template: str, arg: str) -> list | str:
         """Parameterized CPG query (§6A): one of JOERN_QUERY_TEMPLATES.
@@ -313,8 +316,8 @@ class SastTools:
             return ("ERROR: no forward slice for entrypoint "
                     f"{entrypoint!r}. Available (first 20):\n" + "\n".join(known))
         rec = hit[0]
-        for snip in rec.get("snippets", []):
-            snip["code"] = _strip_gt_tags(snip.get("code", ""))
+        scrub_dicts(rec.get("snippets", []), where="tools.get_forward_slice",
+                    target=self.target)
         return rec
 
     def submit_hypotheses(self, hypotheses: list[dict],

@@ -1,0 +1,4 @@
+  38:     # VULN: py-cmdi-01 (cmdi, cwe-78)
+  39:     host = request.form["host"]
+  40:     subprocess.run("ping -c1 " + host, shell=True)
+  41:     return {"ok": True}

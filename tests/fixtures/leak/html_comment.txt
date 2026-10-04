@@ -1,0 +1,4 @@
+<!-- SAFE: cs-safe-03 (xxe, cwe-611) -->
+<script>
+  render(user.bio);
+</script>

@@ -40,7 +40,6 @@ from pydantic_ai.providers.openai import OpenAIProvider
 
 from . import config
 from .contracts import BFinding, Finding
-from .investigator import _strip_gt_tags
 from .tools import SastTools
 
 
@@ -150,22 +149,22 @@ def _model() -> OpenAIChatModel:
 
 
 def _add_read_tools(agent: Agent) -> None:
-    """read/search only — no joern_query (§7); ground-truth tags stripped
-    from tool output (red line §9.2, same as the judge snippet checks)."""
+    """read/search only — no joern_query (§7); ground-truth labels are
+    scrubbed and leak-asserted inside SastTools (red line §9.2, scrub.py)."""
 
     @agent.tool
     def read_function(ctx: RunContext[SastTools], file: str,
                       start: int, end: int) -> str:
         """Read lines start..end (1-based, inclusive) of a source file in
         the target tree, with line numbers."""
-        return _strip_gt_tags(ctx.deps.read_function(file, start, end))
+        return ctx.deps.read_function(file, start, end)
 
     @agent.tool
     def search_code(ctx: RunContext[SastTools], pattern: str,
                     glob: str | None = None) -> str:
         """Regex search across the target tree (ripgrep, ±2 lines of
         context)."""
-        return _strip_gt_tags(ctx.deps.search_code(pattern, glob))
+        return ctx.deps.search_code(pattern, glob)
 
 
 def _build_attacker() -> Agent:

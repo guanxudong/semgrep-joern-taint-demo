@@ -1,0 +1,6 @@
+# VULN: py-sqli-01 (sqli, cwe-89)
+@app.route("/users/search")
+def search_users():
+    q = request.args.get("q", "")
+    rows = db.execute("SELECT * FROM users WHERE name LIKE '%" + q + "%'")
+    return jsonify(rows)

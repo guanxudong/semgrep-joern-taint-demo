@@ -1,0 +1,6 @@
+/*
+ * VULN: cs-xss-01 (xss, cwe-79)
+ */
+string Render(string name) {
+    return $"<div>{name}</div>";
+}

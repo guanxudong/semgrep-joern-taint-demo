@@ -42,15 +42,9 @@ from .report import assign_confidence_level
 from .tools import SastTools
 
 # Ground-truth marker comments (`// VULN: id` / `# SAFE: id`) must never
-# reach the LLM (red line §9.2 — snippet validation as in the judges).
-# The tag portion is dropped anywhere on the line (not only at line start):
-# read_function output prefixes lines with "  12: " and search_code returns
-# rg-formatted "path:12:content", so a ^-anchored pattern misses both.
-_GT_TAG = re.compile(r"(?://|#)\s*(?:VULN|SAFE):[^\n]*")
-
-
-def _strip_gt_tags(code: str) -> str:
-    return _GT_TAG.sub("", code)
+# reach the LLM (red line §9.2). The scrubber + leak assertion live in
+# scrub.py, shared with both judges; every tool wrapper below returns
+# output that SastTools has already scrubbed at the choke point.
 
 
 class FindingSubmission(BaseModel):
@@ -227,10 +221,8 @@ def build_agent(gap: Gap | None, guard: _ToolGuard) -> Agent:
     @agent.tool
     def get_chain_snippets(ctx: RunContext[SastTools], sink_id: str) -> list[dict]:
         """Source code of every function on the sink's chains."""
+        # already scrubbed + leak-asserted inside tools.get_chain_snippets
         records = ctx.deps.get_chain_snippets(sink_id)
-        for rec in records:
-            for snip in rec.get("snippets", []):
-                snip["code"] = _strip_gt_tags(snip.get("code", ""))
         return guard.wrap("get_chain_snippets", {"sink_id": sink_id}, records)
 
     if gap:

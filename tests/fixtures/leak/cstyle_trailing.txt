@@ -1,0 +1,5 @@
+Process<String> run(String target) {
+    // SAFE: java-safe-04 (cmdi, cwe-78) — allow-listed host
+    Runtime.getRuntime().exec(new String[]{"ping", "-c1", target});
+    return out;
+}

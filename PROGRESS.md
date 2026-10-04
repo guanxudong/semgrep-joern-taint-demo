@@ -4,6 +4,59 @@ Status of the Semgrep + Joern taint-confirmation pipeline as of 2026-07.
 Companion docs: `LIMITATIONS.md` (known gaps), `DECISIONS.md` (what we
 decided to do about them).
 
+## Measurement layer hardened (2026-10-04) — D16
+
+The pipeline itself is unchanged; this round is about whether its numbers can
+be trusted and diagnosed. Decision record: DECISIONS.md D16. Tests:
+`tests/` (73 no-LLM checks, `uv run --with pytest pytest tests -q`).
+
+- **One scrubber, one assertion.** `agent/sast_agent/scrub.py` replaces the
+  four divergent `_GT_TAG`/`strip_gt_tags` copies (2 anchored in the judges,
+  2 unanchored in the agent, re-exported into worker/verifier). It covers
+  every known marker shape, then ASSERTS nothing label-shaped survived:
+  certain → `workspace/leak-audit.jsonl` + `GroundTruthLeak` (the run fails),
+  suspected (a bare `py-sqli-01`-shaped id) → audited only. Choke points are
+  `SastTools.read_function/search_code/get_chain_snippets/get_forward_slice`
+  and both judges' `build_prompt`. New `--check-leak` flag on both judges
+  builds every prompt offline (no API key). Verified on all 5 targets'
+  real artifacts, including the pre-D15 marker-bearing ones: 243 prompts,
+  0 leaks. Fixtures for the shapes live in `tests/fixtures/leak/` — the
+  targets themselves can no longer serve as fixtures (D15).
+- **The gate no longer fails for free.** `python-flask-enterprise` was
+  registered in TARGETS but frozen `--skip-llm`, so its empty
+  `judge_a`/`judge_b` made `--compare` exit 1 on every full batch run.
+  Verdicts are now PASS/SKIP/FAIL, SKIP = "not comparable" and never fails
+  (`--require-baseline` promotes it). Verified: the M7 acceptance summary
+  still PASSes with every new dimension enabled; a fabricated batch
+  containing enterprise now PASSes (SKIP on enterprise) instead of failing.
+- **`baseline.json` is v2** `{version, provenance, targets}`: model +
+  base_url, semgrep version, joern fingerprint, git rev, shas of both judge
+  scripts, an engine fingerprint (all `.sc` + `.yml` + deterministic
+  scripts), and per target `tree_sha` + record-level shas of
+  chains/snippets/ep_snippets. Artifact hashes hash JSON *records* — joern
+  mixes `[INFO]` lines into stdout, so raw bytes differ between identical
+  runs. Migrated via `--collect-only`: every retained metric is byte
+  identical, `jsp-legacy` pruned. Every FAIL now names its cause
+  (MODEL_DRIFT / CODE_CHANGED / SNIPPET_CHANGED / ENGINE_CHANGED /
+  JUDGE_CHANGED, else REAL_REGRESSION).
+- **Two new gated dimensions** (opt-in): `--max-token-delta PCT` (vs the
+  previous batch of the same shape — the frozen judge baseline is a
+  different pipeline and its token count is not comparable),
+  `--min-confirmed-rate PCT`, and `--forbid-leak`. Unmeasurable dimensions
+  print SKIP instead of failing.
+- **Reusable**: `scripts/chain_report.py` gained `build_report()` /
+  `confirmed_rate()` (byte-identical output verified against the frozen
+  `chain_report.jsonl`) so the gate can recompute the confirmed rate for the
+  run under test.
+
+**Still open (needs an LLM budget, deliberately not done here):** the frozen
+judge numbers date from 2026-08/09 and were measured on pre-D15 snippets
+(markers stripped in-prompt, so not label-contaminated — but no longer
+reproducible from the current tree), and `python-flask-enterprise` has no
+judge baseline at all. Re-pin with `run_baseline.py --force` (the
+existence-based cache would otherwise reuse the 2026-08 artifacts), which
+also folds in M14.3's enterprise full run.
+
 ## New targets + answer-leak scrub (2026-09-26)
 
 - **D15 scrub**: all in-source `VULN:`/`SAFE:` markers and spoiler comments

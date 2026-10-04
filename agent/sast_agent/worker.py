@@ -41,7 +41,6 @@ from pydantic_ai.providers.openai import OpenAIProvider
 
 from . import config
 from .contracts import BFinding, Evidence, Hypothesis, Verdict
-from .investigator import _strip_gt_tags
 from .report import assign_confidence_level_b
 from .tools import SastTools
 
@@ -188,9 +187,8 @@ def build_agent(hyp: Hypothesis, guard: _ToolGuard) -> Agent:
                       start: int, end: int) -> str:
         """Read lines start..end (1-based, inclusive) of a source file
         in the target tree, with line numbers."""
-        return guard.wrap("read_function",
-                          {"file": file, "start": start, "end": end},
-                          _strip_gt_tags(ctx.deps.read_function(file, start, end)))
+        return guard.wrap("read_function", {"file": file, "start": start, "end": end},
+                          ctx.deps.read_function(file, start, end))
 
     @agent.tool
     def search_code(ctx: RunContext[SastTools], pattern: str,
@@ -199,7 +197,7 @@ def build_agent(hyp: Hypothesis, guard: _ToolGuard) -> Agent:
         context). Use it to find the check idiom on sibling routes and
         middleware/guard registration."""
         return guard.wrap("search_code", {"pattern": pattern, "glob": glob},
-                          _strip_gt_tags(ctx.deps.search_code(pattern, glob)))
+                          ctx.deps.search_code(pattern, glob))
 
     @agent.tool
     def submit_b_finding(ctx: RunContext[SastTools], finding: BFindingSubmission) -> dict:

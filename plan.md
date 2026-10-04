@@ -175,7 +175,10 @@ cs-path-traversal-01），但那是临场发挥；本里程碑把它做成结构
   不直接丢弃）；批量初判用便宜模型，下钻/复核才用强模型。对应
   LIMITATIONS §4 的成本条目——目前最大的成本杠杆。验收：同等 recall
   下 enterprise 全量 token 消耗显著下降（基线 = M14.3 实测值），
-  4 target 回归门禁 PASS、0 新 SAFE FP。
+  4 target 回归门禁 PASS、0 新 SAFE FP。**成本护栏已就位（D16）**：
+  `run_baseline.py --compare … --max-token-delta 30` 会把
+  "recall 不降但 token 暴涨" 变成一次 FAIL，成本基线取上一次同形态
+  batch（judge 基线每链一次调用，与 agent 每次下钻不可比）。
 
 ## 依赖关系
 

@@ -41,6 +41,12 @@ from pydantic_ai import Agent, PromptedOutput
 from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.providers.openai import OpenAIProvider
 
+# Ground-truth scrubber + leak assertion: single implementation, shared with
+# the agent tool layer (red line §9.2). agent/ is not a package root, so the
+# repo-relative path is added rather than importing `agent.sast_agent`.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "agent"))
+from sast_agent import scrub  # noqa: E402
+
 load_dotenv()
 if not os.environ.get("DEEPSEEK_API_KEY"):
     load_dotenv(Path.home() / "Code" / "agent-demo" / ".env")
@@ -120,16 +126,11 @@ def chain_snippets(record: dict, chain: dict) -> list[dict]:
     return ordered
 
 
-_GT_TAG = re.compile(r"^\s*(?://|#)\s*(?:VULN|SAFE):.*(?:\n|$)", re.MULTILINE)
-
-
 def strip_gt_tags(code: str) -> str:
-    """Remove ground-truth marker comments (`// VULN: id` / `# SAFE: id`)
-    from snippet source before prompting — the LLM must judge the code,
-    not the label. Some frontends (pysrc2cpg, csharpsrc2cpg) start the
-    method slice at the comment/attribute line above the handler, so the
-    marker would otherwise leak into the prompt verbatim."""
-    return _GT_TAG.sub("", code)
+    """Deprecated shim — kept so existing imports keep working. The single
+    implementation now lives in agent/sast_agent/scrub.py (shared with the
+    agent tool layer), where build_prompt asserts no label survived."""
+    return scrub.strip_gt_tags(code)
 
 
 def build_prompt(record: dict, chain: dict, snips: list[dict]) -> str:
@@ -146,9 +147,12 @@ def build_prompt(record: dict, chain: dict, snips: list[dict]) -> str:
     for s in snips:
         parts.append(
             f"\n----- {s['file']}:{s['start_line']}-{s['end_line']} "
-            f"({simple_name(s['function'])}) -----\n{strip_gt_tags(s['code'])}"
+            f"({simple_name(s['function'])}) -----\n{s['code']}"
         )
-    return "\n".join(parts)
+    # strip + assert in one pass: nothing label-shaped may reach the model
+    # (red line §9.2). Raises GroundTruthLeak on a surviving marker label.
+    return scrub.scrub("\n".join(parts),
+                       where=f"judge_a.build_prompt:{sink['file']}:{sink['line']}")
 
 
 _HTTP_METHODS = ("GET", "POST", "PUT", "DELETE", "PATCH")
@@ -328,6 +332,30 @@ def _recall(rows: list[dict]) -> str:
     return f"{hit}/{len(rows)} = {hit / len(rows):.0%}"
 
 
+def check_leak(snippets_path: str, label: str = "judge_a") -> int:
+    """Offline prompt-construction check (--check-leak): build every prompt
+    and assert the scrubber left nothing label-shaped behind. Needs no API
+    key, so the leak guard is testable in CI — the guard used to be a regex
+    with no assertion at all."""
+    records = load_jsonl(snippets_path)
+    built = leaks = 0
+    sizes: list[int] = []
+    for record in records:
+        for chain in record.get("chains", []):
+            built += 1
+            try:
+                prompt = build_prompt(record, chain, chain_snippets(record, chain))
+            except scrub.GroundTruthLeak as e:
+                leaks += 1
+                sys.stderr.write(f"// LEAK: {e}\n")
+                continue
+            sizes.append(len(prompt))
+    avg = sum(sizes) // len(sizes) if sizes else 0
+    print(f"{label}: {built} prompts built from {snippets_path}, "
+          f"avg {avg} chars, leaks {leaks}")
+    return 1 if leaks else 0
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--snippets", required=False, help="JSONL from extract_chain_snippets.sc")
@@ -337,10 +365,19 @@ def main() -> int:
     ap.add_argument("-o", "--output", default="-", help="verdicts JSONL (default: stdout suppressed; use file)")
     ap.add_argument("--concurrency", type=int, default=4)
     ap.add_argument("--limit", type=int, default=0, help="judge only the first N chains (smoke test)")
+    ap.add_argument("--check-leak", action="store_true",
+                    help="no LLM calls: build every prompt, assert no "
+                         "ground-truth label survived scrubbing, report "
+                         "prompt sizes (offline leak regression check)")
     args = ap.parse_args()
 
     with open(args.ground_truth) as f:
         ground_truth = json.load(f)
+
+    if args.check_leak:
+        if not args.snippets:
+            sys.exit("--snippets is required with --check-leak")
+        return check_leak(args.snippets, "judge_a")
 
     if args.from_verdicts:
         verdicts = load_jsonl(args.from_verdicts)

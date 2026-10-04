@@ -1,0 +1,3 @@
+targets/python-flask/routes/users.py:41:  # VULN: py-idor-01 (idor, cwe-639)
+targets/python-flask/routes/users.py:42-    row = UserRepo.get(user_id)
+targets/python-flask/routes/users.py:43-    return jsonify(row)

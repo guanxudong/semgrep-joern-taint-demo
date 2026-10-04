@@ -1,0 +1,5 @@
+#VULN:py-path-traversal-02 (path-traversal, cwe-22)
+@app.route("/download")
+def download():
+    name = request.args.get("name")
+    return send_file(os.path.join(UPLOAD_DIR, name))

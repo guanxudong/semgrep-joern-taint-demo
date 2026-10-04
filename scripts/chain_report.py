@@ -13,6 +13,9 @@ A chain is CONFIRMED when the matching taint record has at least one flow
 whose source_method attributes to the chain's entrypoint (method fullName;
 for JS lambdas the "<lambda>N [GET /route]" form is matched on either part).
 
+build_report() is also imported by agent/run_baseline.py --compare, which
+recomputes the confirmed rate for the run under test.
+
 Usage:
     python3 scripts/chain_report.py --chains /tmp/chains_py.jsonl \
         --taint /tmp/taint_py.jsonl -o /tmp/report_py.jsonl
@@ -53,16 +56,11 @@ def flow_matches_chain(source_method, chain):
     return False
 
 
-def main() -> int:
-    ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--chains", required=True, help="CHAINS_JSON output of backward_from_sinks.sc")
-    ap.add_argument("--taint", required=True, help="JSONL output of taint_confirm.sc")
-    ap.add_argument("-o", "--output", default="-", help="output file (default: stdout)")
-    args = ap.parse_args()
-
-    chains_rows = load_jsonl(args.chains)
-    taint_rows = load_jsonl(args.taint)
-
+def build_report(chains_rows: list[dict], taint_rows: list[dict],
+                 warn=None) -> list[dict]:
+    """Join chains with taint records into per-chain CONFIRMED/UNCONFIRMED/
+    NO_CHAIN rows. `warn` (optional) receives a message per taint record that
+    no backward chain reached."""
     taint_by_key = {}
     for row in taint_rows:
         taint_by_key.setdefault(sink_key(row.get("sink", {})), []).append(row)
@@ -73,8 +71,8 @@ def main() -> int:
         sink = row.get("sink", {})
         key = sink_key(sink)
         taints = taint_by_key.get(key, [])
-        if not taints:
-            sys.stderr.write(f"// warn: no taint record for sink {key[0]}:{key[1]}\n")
+        if not taints and warn:
+            warn(f"no taint record for sink {key[0]}:{key[1]}")
         matched_taint.add(key)
         flows = [fl for t in taints for fl in t.get("flows", [])]
         chains = row.get("chains", [])
@@ -91,7 +89,8 @@ def main() -> int:
                 }
             )
         for chain in chains:
-            hits = [fl for fl in flows if flow_matches_chain(fl.get("source_method", ""), chain)]
+            hits = [fl for fl in flows
+                    if flow_matches_chain(fl.get("source_method", ""), chain)]
             report.append(
                 {
                     "route": chain.get("route", ""),
@@ -116,6 +115,32 @@ def main() -> int:
                     "flows": len(row.get("flows", [])),
                 }
             )
+    return report
+
+
+def confirmed_rate(report: list[dict]) -> tuple[int, int]:
+    """(CONFIRMED count, total chain rows)."""
+    return (sum(1 for r in report if r.get("status") == "CONFIRMED"),
+            len(report))
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--chains", required=True,
+                    help="CHAINS_JSON output of backward_from_sinks.sc")
+    ap.add_argument("--taint", required=True,
+                    help="JSONL output of taint_confirm.sc")
+    ap.add_argument("-o", "--output", default="-",
+                    help="output file (default: stdout)")
+    args = ap.parse_args()
+
+    chains_rows = load_jsonl(args.chains)
+    taint_rows = load_jsonl(args.taint)
+
+    def warn(msg: str) -> None:
+        sys.stderr.write(f"// warn: {msg}\n")
+
+    report = build_report(chains_rows, taint_rows, warn=warn)
 
     out = "\n".join(json.dumps(r) for r in report) + ("\n" if report else "")
     if args.output == "-":
@@ -124,11 +149,11 @@ def main() -> int:
         with open(args.output, "w") as f:
             f.write(out)
 
-    confirmed = sum(1 for r in report if r["status"] == "CONFIRMED")
+    confirmed, total = confirmed_rate(report)
     unconfirmed = sum(1 for r in report if r["status"] == "UNCONFIRMED")
     no_chain = sum(1 for r in report if r["status"] == "NO_CHAIN")
     sys.stderr.write(
-        f"// chains: {len(report)} total, {confirmed} CONFIRMED, "
+        f"// chains: {total} total, {confirmed} CONFIRMED, "
         f"{unconfirmed} UNCONFIRMED, {no_chain} NO_CHAIN\n"
     )
     return 0

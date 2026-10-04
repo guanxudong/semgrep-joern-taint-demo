@@ -1,0 +1,3 @@
+// regression fixture for py-broken-access-control-01
+def update_profile(user_id, payload):
+    repo.patch(user_id, payload)

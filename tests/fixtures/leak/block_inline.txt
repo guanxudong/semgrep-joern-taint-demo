@@ -1,0 +1,2 @@
+var out = "hello"; /* VULN: js-sqli-02 (sqli, cwe-89) */ out += name;
+rows = db.query("SELECT * FROM t WHERE id = " + id);

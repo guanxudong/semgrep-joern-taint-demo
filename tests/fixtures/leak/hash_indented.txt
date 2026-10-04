@@ -1,0 +1,7 @@
+@require_auth
+def get_user(user_id):
+    # SAFE: py-safe-02 (idor, cwe-639)
+    row = repo.find(user_id)
+    if row is None:
+        return {"error": "not found"}, 404
+    return row

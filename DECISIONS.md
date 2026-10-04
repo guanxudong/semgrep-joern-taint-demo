@@ -140,6 +140,92 @@ the user needs a LEGACY CGI.pm-style project (flat `cgi-bin/*.pl` scripts,
 CGI.pm param parsing, `print` HTML output), the shape of the old Perl web
 apps this tier-3 target is meant to represent.
 
+## Measurement integrity (2026-10-04)
+
+### D16. One scrubber with a mechanical leak assertion; a gate that explains itself
+
+Gap found while auditing the measurement layer (not the pipeline):
+1. **The scrubber had four divergent copies.** Two `^`-anchored regexes in
+   the judge scripts and two unanchored ones in the agent tool layer
+   (`investigator.py`, `tools.py`, re-exported to `worker.py`/`verifier.py`).
+   The divergence is exactly what let a labelled `rg` line through once
+   (M7 acceptance). D15 then removed every marker from every target, so the
+   repo lost its natural fixture and any future regression in the scrub
+   would have been silent — LIMITATIONS §4 already classes leak paths as
+   "a class of issue, not a fixed bug".
+2. **The gate failed for the wrong reason.** `python-flask-enterprise` is
+   registered in both TARGETS tables (so `--target all` includes it) but was
+   frozen with `--skip-llm`, leaving `judge_a`/`judge_b` empty;
+   `compare_with_baseline()` read that as "recall unparseable" → FAIL. Every
+   full batch run was guaranteed to exit 1 for reasons unrelated to code
+   quality, and the exit-1 signal was diluted across the other targets.
+3. **A recall drop carried no cause.** Code edit, snippet change, rule/joern
+   change and model drift all surfaced as the same red row. Model drift has
+   already forced two baseline re-pins (2026-08, 2026-09) with no way to
+   distinguish it from a real regression.
+4. **Only two gated dimensions.** Cost and confirmed rate — the two numbers
+   M14.2 will move — had no guardrail.
+
+Decisions:
+- **Single scrubber, `agent/sast_agent/scrub.py`** (dependency-free,
+  ground-truth-blind by construction): `strip_gt_tags()` covers every known
+  label shape (`//`, `#`, `/*`, `<!--`, `*`, any position on the line) and
+  `find_gt_leak()` classifies survivors as `certain` (a `VULN:`/`SAFE:`
+  label survived → the strip failed) or `suspected` (a bare `<lang>-<type>-
+  <nn>` id literal). `scrub()` strips, then ASSERTS: certain → append to
+  `workspace/leak-audit.jsonl` and raise `GroundTruthLeak`. Silent stripping
+  is what made the M7 leak invisible; a failed scrub must be loud. The id
+  pattern is a hardcoded shape, never read from `ground_truth.json` — the
+  tool layer must not touch ground truth (red line §9.2). Suspected hits are
+  audited, not fatal, because a real repo may legitimately name a fixture
+  after a CVE-style id.
+- **Assertion choke points, not per-call-site code**: `SastTools` scrubs
+  `read_function` / `search_code` / `get_chain_snippets` /
+  `get_forward_slice` (covers investigator, worker and verifier), and both
+  judges scrub the assembled `build_prompt`. New callers cannot forget.
+- **`--check-leak` on both judges** builds every prompt and asserts, with no
+  API key, so the leak guard is testable offline. Verified against all five
+  targets' real snippet artifacts, including the pre-D15 marker-bearing ones:
+  243 prompts, 0 leaks.
+- **Gate verdicts are PASS / SKIP / FAIL.** SKIP = "not comparable" (no judge
+  baseline, dimension data missing) and never fails the gate;
+  `--require-baseline` promotes it to FAIL for strict runs. This is the fix
+  for the guaranteed-false-FAIL above.
+- **`baseline.json` is version 2**: `{version, provenance, targets}` with
+  provenance = model + base_url, semgrep version, joern fingerprint (the
+  distribution has no `--version`; the version is read off
+  `lib/io.joern.joern-cli-<v>.jar`), git rev/dirty, sha of both judge scripts,
+  sha of every `analysis/joern/*.sc` + `analysis/rules/*.yml` + the
+  deterministic scripts (the ENGINE fingerprint), and per target
+  `tree_sha` + record-level shas of chains / snippets / entrypoint snippets.
+  v1 flat files are read transparently and migrated on write; entries for
+  unregistered targets (the removed `jsp-legacy`) are pruned with a log line.
+  Artifact hashes are computed over JSON **records**, not raw bytes — joern
+  writes `[INFO]` lines to the same stdout, so raw hashes differ between
+  identical runs while records are identical.
+- **Every FAIL names its cause**: MODEL_DRIFT / CODE_CHANGED /
+  SNIPPET_CHANGED / ENGINE_CHANGED / JUDGE_CHANGED, else REAL_REGRESSION.
+  `REAL_REGRESSION` is reserved for recall/FP failures — a budget overrun or
+  a missing measurement is not a quality regression.
+- **Token budget compares against the previous batch of the same shape**, not
+  the frozen judge baseline: the judge makes one call per chain, the agent
+  runs a full investigation per sink, so their token counts are not
+  comparable. Confirmed rate, by contrast, is the same deterministic stage on
+  both sides and is compared against the frozen baseline.
+- **New dimensions are opt-in** (`--max-token-delta`, `--min-confirmed-rate`,
+  `--forbid-leak`): the M5/M8 gate keeps its meaning until someone asks for
+  the stricter run, and every unmeasurable dimension prints SKIP instead of
+  failing.
+- **Cost is gated because M14.2 needs it**: the tri-state judge's acceptance
+  criterion is "same recall, materially fewer tokens"; without a token gate
+  nothing would catch a regression that bought recall with 3× the budget.
+
+Not decided here: re-pinning the baseline (needs an LLM budget — see
+PROGRESS.md). The frozen numbers were measured on pre-D15 snippets whose
+markers were stripped in-prompt, so they are not label-contaminated, but
+they are no longer reproducible from the current tree, and the enterprise
+target still has no judge baseline at all.
+
 ## Roadmap (2026-09-23)
 
 ### D14. Agent productization first; self-evolution deferred
