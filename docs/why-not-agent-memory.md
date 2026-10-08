@@ -191,6 +191,7 @@ Two hard requirements:
    [ ] Generated code
    [ ] Duplicate
    [ ] Compensating control
+   [ ] Accepted risk (internal-only)
    [ ] Other
    ```
 
@@ -200,6 +201,38 @@ Two hard requirements:
 From the user's perspective this behaves exactly like the memory proposal —
 "mark it once, never see it again" — but it is auditable, expires safely, and
 does not generalize into false negatives.
+
+### 4.1 Worked example: "missing auth" on an internal entrypoint
+
+Concrete case: an entrypoint is flagged on every scan for lacking an
+authentication check, but the project's internal deployment allows this
+endpoint to be unauthenticated (the network boundary is the compensating
+control). This sits at the intersection of the three "good fit" rows in §2 —
+project-specific convention, historical suppression, compensating control —
+and is the canonical case for Finding History rather than agent memory.
+
+Design points:
+
+- **Fingerprint granularity is rule × entrypoint, never the entrypoint
+  itself.** The user marked "the missing-auth rule does not apply here", not
+  "this entrypoint is safe". The fingerprint is
+  `rule_id + route + handler symbol` (plus a dataflow hash where the rule is
+  flow-based) — never file+line. A SQLi finding on the same entrypoint
+  tomorrow must still be reported.
+- **Use the `Accepted risk (internal-only)` reason code** (or
+  `Compensating control`), and require a short free-text justification:
+  who approved it, and which network-topology assumption it rests on.
+- **The invalidation hash must cover more than the handler body.** Auth
+  posture is usually decided outside the function — by decorators, middleware
+  chains, and the route declaration. If only the body is hashed, swapping
+  `@internal_only` for `@public` would not invalidate the suppression. Hash
+  the handler body + its decorator/middleware chain + the route declaration
+  line.
+- **Suppressions are deployment-side state.** They live with the deployment,
+  never inside the benchmark corpus, never committed alongside the targets,
+  and never participate in ground-truth scoring — otherwise they become
+  another answer-key leak channel, the same category of problem the scrubber
+  guards against.
 
 ---
 
