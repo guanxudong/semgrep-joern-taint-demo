@@ -102,6 +102,63 @@ def string_arg(node, src: bytes) -> str | None:
     return None
 
 
+def iter_nodes(node):
+    """Depth-first walk over every node in a syntax tree."""
+    yield node
+    for child in node.children:
+        yield from iter_nodes(child)
+
+
+# Non-HTTP entrypoint registrations: message-bus subscriptions, directory
+# watchers and command-dispatch registries (see targets/*-clearing-worker,
+# targets/*-fix-gateway). Maps the registration function to (verb, kind).
+REGISTRY_KINDS = {
+    "subscribe": ("MSG", "message"),
+    "watch": ("FILE", "file"),
+    "register": ("CMD", "command"),
+    "Register": ("CMD", "command"),
+}
+
+
+def handler_name(node, src: bytes) -> str | None:
+    """Derive a handler function name from a registration's handler argument."""
+    if node.type in ("attribute", "member_access_expression"):
+        name = node.child_by_field_name("attribute") or node.child_by_field_name("name")
+        return node_text(name, src) if name else None
+    if node.type == "identifier":
+        return node_text(node, src)
+    if node.type == "method_reference":
+        name = node.child_by_field_name("name")
+        if name:
+            return node_text(name, src)
+        ids = [c for c in node.children if c.type == "identifier"]
+        return node_text(ids[-1], src) if ids else None
+    text = node_text(node, src)
+    if "::" in text or "." in text:
+        return text.split("::")[-1].split(".")[-1]
+    return None
+
+
+def registration_route(node, reg: str, args, src: bytes):
+    """Route record for one subscribe/watch/register call, or None."""
+    if reg not in REGISTRY_KINDS or args is None:
+        return None
+    pos = [a for a in args.children if a.type not in ("(", ")", ",")]
+    if len(pos) < 2 or pos[0].type == "comment":
+        return None
+    fname = handler_name(pos[1], src)
+    if fname is None:
+        return None
+    verb, kind = REGISTRY_KINDS[reg]
+    return {
+        "method": verb,
+        "path": unquote(node_text(pos[0], src)),
+        "function": fname,
+        "line": node.start_point[0] + 1,
+        "kind": kind,
+    }
+
+
 def signature(node, src: bytes) -> str:
     body = node.child_by_field_name("body")
     end = body.start_byte if body else node.end_byte
@@ -295,6 +352,18 @@ def extract_python(tree, src: bytes):
                 name_node = next((x for x in c.children if x.type == "dotted_name"), None)
             if name_node is not None:
                 hints.append(f"{module}.{node_text(name_node, src)}")
+    for node in iter_nodes(root):
+        if node.type != "call":
+            continue
+        func = node.child_by_field_name("function")
+        if func is None or func.type != "attribute":
+            continue
+        attr = func.child_by_field_name("attribute")
+        reg = node_text(attr, src) if attr else ""
+        route = registration_route(node, reg,
+                                   node.child_by_field_name("arguments"), src)
+        if route:
+            routes.append(route)
     return imports, symbols, routes, hints
 
 
@@ -513,6 +582,15 @@ def extract_java(tree, src: bytes):
                 continue
 
     visit(tree.root_node, None)
+    for node in iter_nodes(tree.root_node):
+        if node.type != "method_invocation":
+            continue
+        name_node = node.child_by_field_name("name")
+        reg = node_text(name_node, src) if name_node else ""
+        route = registration_route(node, reg,
+                                   node.child_by_field_name("arguments"), src)
+        if route:
+            routes.append(route)
     return imports, symbols, routes
 
 
@@ -601,6 +679,18 @@ def extract_csharp(tree, src: bytes):
                 })
 
     visit(tree.root_node, None)
+    for node in iter_nodes(tree.root_node):
+        if node.type != "invocation_expression":
+            continue
+        func = node.child_by_field_name("function")
+        if func is None or func.type != "member_access_expression":
+            continue
+        name_node = func.child_by_field_name("name")
+        reg = node_text(name_node, src) if name_node else ""
+        args = next((c for c in node.children if c.type == "argument_list"), None)
+        route = registration_route(node, reg, args, src)
+        if route:
+            routes.append(route)
     return imports, symbols, routes
 
 
@@ -835,7 +925,7 @@ def render_markdown(data: dict, max_tokens: int | None) -> str:
     tree_sec = ["## Directory Tree", "", "```",
                 render_tree([f["path"] for f in files], dict(roles)), "```", ""]
 
-    route_rows = ["## HTTP Routes", "",
+    route_rows = ["## Routes", "",
                   "| Method | Path | File | Function | Line |",
                   "|---|---|---|---|---|"]
     all_routes = []

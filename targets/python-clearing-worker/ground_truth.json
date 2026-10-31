@@ -1,0 +1,425 @@
+[
+  {
+    "id": "pycl-sqli-01",
+    "category": "A",
+    "vuln_type": "sqli",
+    "cwe": 89,
+    "expected": "vulnerable",
+    "difficulty": "shallow",
+    "entrypoint": {
+      "route": "MSG reconcile.diff",
+      "file": "handlers/reconciliation.py",
+      "function": "on_diff_query"
+    },
+    "sink": {
+      "file": "data/store.py",
+      "function": "query_unsafe",
+      "line_hint": "cur.execute"
+    },
+    "chain": [
+      "handlers/reconciliation.py",
+      "repositories/recon_repo.py",
+      "data/store.py"
+    ],
+    "notes": "Account from the message payload interpolated straight into the WHERE clause."
+  },
+  {
+    "id": "pycl-sqli-02",
+    "category": "A",
+    "vuln_type": "sqli",
+    "cwe": 89,
+    "expected": "vulnerable",
+    "difficulty": "deep",
+    "entrypoint": {
+      "route": "MSG execution.report",
+      "file": "handlers/executions.py",
+      "function": "on_execution_report"
+    },
+    "sink": {
+      "file": "data/store.py",
+      "function": "execute_unsafe",
+      "line_hint": "cur.execute"
+    },
+    "chain": [
+      "handlers/executions.py",
+      "services/recon_service.py",
+      "repositories/recon_repo.py",
+      "data/store.py"
+    ],
+    "notes": "Payload staged in ReconService._pending_* instance fields by stage_execution(), read back by flush_staged(). Field-sensitive analysis required."
+  },
+  {
+    "id": "pycl-xss-01",
+    "category": "A",
+    "vuln_type": "xss",
+    "cwe": 79,
+    "expected": "vulnerable",
+    "difficulty": "shallow",
+    "entrypoint": {
+      "route": "MSG reconcile.done",
+      "file": "handlers/reconciliation.py",
+      "function": "on_reconcile_done"
+    },
+    "sink": {
+      "file": "services/notify_service.py",
+      "function": "render_result_email",
+      "line_hint": "f\"<tr><td>"
+    },
+    "chain": [
+      "handlers/reconciliation.py",
+      "services/notify_service.py"
+    ],
+    "notes": "Unmatched-record rows (symbol/diff) from the message payload concatenated into the HTML result email."
+  },
+  {
+    "id": "pycl-cmdi-01",
+    "category": "A",
+    "vuln_type": "cmdi",
+    "cwe": 78,
+    "expected": "vulnerable",
+    "difficulty": "shallow",
+    "entrypoint": {
+      "route": "MSG notify.send",
+      "file": "handlers/notifications.py",
+      "function": "on_notify"
+    },
+    "sink": {
+      "file": "services/archive_service.py",
+      "function": "notify_ops",
+      "line_hint": "os.system"
+    },
+    "chain": [
+      "handlers/notifications.py",
+      "services/archive_service.py"
+    ],
+    "notes": "Alert title from the message payload concatenated into the pagerduty-send invocation."
+  },
+  {
+    "id": "pycl-cmdi-02",
+    "category": "A",
+    "vuln_type": "cmdi",
+    "cwe": 78,
+    "expected": "vulnerable",
+    "difficulty": "deep",
+    "entrypoint": {
+      "route": "MSG notify.send",
+      "file": "handlers/notifications.py",
+      "function": "on_notify"
+    },
+    "sink": {
+      "file": "services/archive_service.py",
+      "function": "send_staged_alert",
+      "line_hint": "os.system"
+    },
+    "chain": [
+      "handlers/notifications.py",
+      "services/archive_service.py"
+    ],
+    "notes": "Taint stored in ArchiveService._pending_label instance field by stage_alert(), read by send_staged_alert(). Field-sensitive analysis required."
+  },
+  {
+    "id": "pycl-path-traversal-01",
+    "category": "A",
+    "vuln_type": "path-traversal",
+    "cwe": 22,
+    "expected": "vulnerable",
+    "difficulty": "medium",
+    "entrypoint": {
+      "route": "FILE settlement",
+      "file": "handlers/settlement.py",
+      "function": "on_settlement_file"
+    },
+    "sink": {
+      "file": "services/archive_service.py",
+      "function": "import_attachment",
+      "line_hint": "open("
+    },
+    "chain": [
+      "handlers/settlement.py",
+      "services/archive_service.py"
+    ],
+    "notes": "Attachment name taken from the settlement-file header and joined onto ARCHIVE_DIR without normalization."
+  },
+  {
+    "id": "pycl-rce-01",
+    "category": "A",
+    "vuln_type": "rce",
+    "cwe": 94,
+    "expected": "vulnerable",
+    "difficulty": "shallow",
+    "entrypoint": {
+      "route": "MSG alert.rule",
+      "file": "handlers/reconciliation.py",
+      "function": "on_alert_rule"
+    },
+    "sink": {
+      "file": "services/rule_engine.py",
+      "function": "evaluate",
+      "line_hint": "eval("
+    },
+    "chain": [
+      "handlers/reconciliation.py",
+      "services/rule_engine.py"
+    ],
+    "notes": "Rule expression from the message payload passed to eval() with only the data name bound."
+  },
+  {
+    "id": "pycl-xxe-01",
+    "category": "A",
+    "vuln_type": "xxe",
+    "cwe": 611,
+    "expected": "vulnerable",
+    "difficulty": "shallow",
+    "entrypoint": {
+      "route": "FILE settlement",
+      "file": "handlers/settlement.py",
+      "function": "on_settlement_file"
+    },
+    "sink": {
+      "file": "ingest/parsers.py",
+      "function": "parse_settlement_xml",
+      "line_hint": "resolve_entities=True"
+    },
+    "chain": [
+      "handlers/settlement.py",
+      "ingest/parsers.py"
+    ],
+    "notes": "lxml XMLParser with resolve_entities=True and no_network=False on the settlement XML body."
+  },
+  {
+    "id": "pycl-deserialization-01",
+    "category": "A",
+    "vuln_type": "deserialization",
+    "cwe": 502,
+    "expected": "vulnerable",
+    "difficulty": "shallow",
+    "entrypoint": {
+      "route": "MSG snapshot.load",
+      "file": "handlers/reconciliation.py",
+      "function": "on_load_snapshot"
+    },
+    "sink": {
+      "file": "services/recon_service.py",
+      "function": "load_snapshot",
+      "line_hint": "pickle.loads"
+    },
+    "chain": [
+      "handlers/reconciliation.py",
+      "services/recon_service.py"
+    ],
+    "notes": "pickle.loads on the raw blob carried in the message payload."
+  },
+  {
+    "id": "pycl-ssti-01",
+    "category": "A",
+    "vuln_type": "ssti",
+    "cwe": 1336,
+    "expected": "vulnerable",
+    "difficulty": "shallow",
+    "entrypoint": {
+      "route": "MSG notify.send",
+      "file": "handlers/notifications.py",
+      "function": "on_notify"
+    },
+    "sink": {
+      "file": "services/notify_service.py",
+      "function": "render_notice",
+      "line_hint": "from_string"
+    },
+    "chain": [
+      "handlers/notifications.py",
+      "services/notify_service.py"
+    ],
+    "notes": "Jinja2 template taken from the message payload and compiled with from_string()."
+  },
+  {
+    "id": "pycl-idor-01",
+    "category": "B",
+    "vuln_type": "idor",
+    "cwe": 639,
+    "expected": "vulnerable",
+    "difficulty": "medium",
+    "entrypoint": {
+      "route": "MSG reconcile.request",
+      "file": "handlers/reconciliation.py",
+      "function": "on_request"
+    },
+    "chain": [
+      "handlers/reconciliation.py",
+      "services/recon_service.py"
+    ],
+    "notes": "Fetches any account's fund statement by payload account; the requester header is never compared against it."
+  },
+  {
+    "id": "pycl-business-logic-01",
+    "category": "B",
+    "vuln_type": "business-logic",
+    "cwe": 840,
+    "expected": "vulnerable",
+    "difficulty": "medium",
+    "entrypoint": {
+      "route": "FILE settlement",
+      "file": "handlers/settlement.py",
+      "function": "on_settlement_file"
+    },
+    "chain": [
+      "handlers/settlement.py",
+      "services/recon_service.py"
+    ],
+    "notes": "apply_settlement records file_id in _processed_files but never consults it, so re-dropping the same settlement file books every row twice; small negative in-tolerance diffs are also auto-booked onto the ROUNDING account."
+  },
+  {
+    "id": "pycl-race-condition-01",
+    "category": "B",
+    "vuln_type": "race-condition",
+    "cwe": 367,
+    "expected": "vulnerable",
+    "difficulty": "medium",
+    "entrypoint": {
+      "route": "MSG execution.report",
+      "file": "handlers/executions.py",
+      "function": "on_execution_report"
+    },
+    "chain": [
+      "handlers/executions.py",
+      "services/money_service.py"
+    ],
+    "notes": "Check-then-act on BALANCES in money_service.adjust without a lock; concurrent execution reports overspend the same account."
+  },
+  {
+    "id": "pycl-priv-esc-01",
+    "category": "B",
+    "vuln_type": "priv-esc",
+    "cwe": 269,
+    "expected": "vulnerable",
+    "difficulty": "shallow",
+    "entrypoint": {
+      "route": "FILE settlement",
+      "file": "handlers/settlement.py",
+      "function": "on_settlement_file"
+    },
+    "chain": [
+      "handlers/settlement.py",
+      "services/recon_service.py"
+    ],
+    "notes": "operator_role is taken from the settlement-file header; role=admin routes to admin_adjust() which moves money for any account in the file."
+  },
+  {
+    "id": "pycl-mass-assignment-01",
+    "category": "B",
+    "vuln_type": "mass-assignment",
+    "cwe": 915,
+    "expected": "vulnerable",
+    "difficulty": "shallow",
+    "entrypoint": {
+      "route": "MSG execution.report",
+      "file": "handlers/executions.py",
+      "function": "on_execution_report"
+    },
+    "chain": [
+      "handlers/executions.py"
+    ],
+    "notes": "setattr loop copies every payload key onto the ExecutionRecord object, including internal fields a sender should not control."
+  },
+  {
+    "id": "pycl-broken-access-control-01",
+    "category": "B",
+    "vuln_type": "broken-access-control",
+    "cwe": 862,
+    "expected": "vulnerable",
+    "difficulty": "shallow",
+    "entrypoint": {
+      "route": "MSG ops.run_batch",
+      "file": "handlers/reconciliation.py",
+      "function": "on_run_batch"
+    },
+    "chain": [
+      "handlers/reconciliation.py",
+      "services/recon_service.py"
+    ],
+    "notes": "The privileged full re-reconcile can be triggered by anyone able to publish ops.run_batch; there is no operator check at all."
+  },
+  {
+    "id": "pycl-auth-flaws-01",
+    "category": "B",
+    "vuln_type": "auth-flaws",
+    "cwe": 287,
+    "expected": "vulnerable",
+    "difficulty": "medium",
+    "entrypoint": {
+      "route": "MSG reconcile.request",
+      "file": "handlers/reconciliation.py",
+      "function": "on_request"
+    },
+    "chain": [
+      "handlers/reconciliation.py",
+      "config/settings.py"
+    ],
+    "notes": "Request token is md5(account|date) with no secret, so anyone can forge it; the SFTP password used to deliver statements is hardcoded in config/settings.py."
+  },
+  {
+    "id": "pycl-safe-01",
+    "category": "A",
+    "vuln_type": "sqli",
+    "cwe": 89,
+    "expected": "safe",
+    "entrypoint": {
+      "route": "MSG reconcile.diff_safe",
+      "file": "handlers/reconciliation.py",
+      "function": "on_diff_query_safe"
+    },
+    "notes": "Parameterized query via find_unmatched_safe; a correct tool must NOT report this."
+  },
+  {
+    "id": "pycl-safe-02",
+    "category": "B",
+    "vuln_type": "idor",
+    "cwe": 639,
+    "expected": "safe",
+    "entrypoint": {
+      "route": "MSG reconcile.request_safe",
+      "file": "handlers/reconciliation.py",
+      "function": "on_request_safe"
+    },
+    "notes": "Requester header must equal the requested account before the statement is fetched."
+  },
+  {
+    "id": "pycl-safe-03",
+    "category": "A",
+    "vuln_type": "xxe",
+    "cwe": 611,
+    "expected": "safe",
+    "entrypoint": {
+      "route": "FILE settlement_safe",
+      "file": "handlers/settlement.py",
+      "function": "on_settlement_file_safe"
+    },
+    "notes": "defusedxml is used; entities rejected."
+  },
+  {
+    "id": "pycl-safe-04",
+    "category": "A",
+    "vuln_type": "path-traversal",
+    "cwe": 22,
+    "expected": "safe",
+    "entrypoint": {
+      "route": "FILE settlement_safe",
+      "file": "handlers/settlement.py",
+      "function": "on_settlement_file_safe"
+    },
+    "notes": "Attachment name checked against a strict allow-list regex before reading."
+  },
+  {
+    "id": "pycl-safe-05",
+    "category": "B",
+    "vuln_type": "race-condition",
+    "cwe": 367,
+    "expected": "safe",
+    "entrypoint": {
+      "route": "MSG execution.report_safe",
+      "file": "handlers/executions.py",
+      "function": "on_execution_report_safe"
+    },
+    "notes": "Balance adjustment guarded by threading.Lock in money_service.adjust_locked."
+  }
+]

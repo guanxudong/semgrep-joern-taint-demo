@@ -104,6 +104,25 @@ With the agent loop in place (M0–M8, `docs/AGENT_MVP_PLAN.md`), the open
 weaknesses now live in the judgment/agent layer, not the engine. Evidence
 for each item: PROGRESS.md (M0–M8 entries) and `agent/HANDOFF.md`.
 
+- **Non-HTTP targets are generated but not yet pipeline-wired (D17,
+  2026-10-31).** The four securities-industry targets (`java-fix-gateway`,
+  `csharp-fix-gateway`, `python-clearing-worker`,
+  `perl-clearing-worker`) carry full ground truth and their entrypoints
+  are extractable by `repo_map.py` (registry-shaped dispatch,
+  `kind: message|command|file`), but the rest of the pipeline is still
+  HTTP-shaped: (a) `analysis/joern/extract_entrypoint_snippets.sc` only
+  enumerates framework-annotated HTTP entrypoints, so the category-B joern
+  path finds no handlers in these targets; (b) `taint_confirm.sc` sources
+  don't include message-payload / command-tag reads, so A-class chains
+  won't confirm even though the sinks (os.system, eval, pickle.loads,
+  `readObject`, ...) still match the Semgrep rules; (c)
+  `compare_repo_maps.py --check` and the M6 planner's route-coverage check
+  compare HTTP-style routes, so `MSG <subject>` / `CMD <cmd>` / `FILE`
+  triggers score as route misses (function hits still match; measured
+  16/22 and 7/22 route hits on the two new engine-backed targets). The B
+  judge's prompt wording was generalized ("externally reachable
+  entrypoint"); matching keys on file+function and is unaffected.
+
 - **Judgment-layer model drift.** DeepSeek endpoint drift has flipped
   verdicts (A-class FNs java-cmdi-01/02; safe-02 flipped to FP on 4
   targets) and forced a baseline re-pin (2026-08). Every LLM verdict is

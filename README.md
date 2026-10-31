@@ -22,24 +22,30 @@ targets/
 ├── js-ts-express/      Express 4, mixed .js and .ts
 ├── python-flask/       Python + Flask (blueprints)
 ├── csharp-aspnet/      C# + ASP.NET Core style controllers
-└── python-flask-enterprise/  Enterprise-style pilot: layered api/ → services/
-                              → repositories/ → data/, ~50 endpoints, NO
-                              in-source VULN/SAFE markers (anti-overfitting)
+├── perl-cgi/           Legacy CGI.pm-style Perl (no engine support by design)
+├── java-fix-gateway/   Non-HTTP: FIX-style TCP order gateway (registry dispatch)
+├── csharp-fix-gateway/ Non-HTTP: FIX gateway mirror (C#/.NET buy-side idiom)
+├── python-clearing-worker/  Non-HTTP: clearing/reconciliation message+file worker
+└── perl-clearing-worker/    Non-HTTP: clearing worker mirror (legacy Perl ops)
 ```
 
-(The legacy JSP target `jsp-legacy/` was removed on 2026-09-05; it lives on
-in git history if ever needed again.)
+(The legacy JSP target `jsp-legacy/` was removed on 2026-09-05 and the
+`python-flask-enterprise` / `php-laravel` pilots later; they live on in git
+history if ever needed again.)
 
-Each project contains `routes|controllers/` (entrypoints), `services/`
+Each HTTP project contains `routes|controllers/` (entrypoints), `services/`
 (business logic), `data|db/` (data access sinks), `config/` (hardcoded
 secrets), plus **`ground_truth.json`** (machine-readable scoring baseline) and
-**`GROUND_TRUTH.md`** (human-readable table). Every vulnerable handler carries
-a `VULN: <id>` comment matching its ground-truth id; safe counter-examples
-carry `SAFE: <id>`. The enterprise pilot is the exception: its source carries
-no markers — ground truth is the only record (anti-overfitting, DECISIONS.md
-D11).
+**`GROUND_TRUTH.md`** (human-readable table). The non-HTTP projects mirror the
+same layering with protocol/registry dispatch instead of HTTP routes (see
+DECISIONS.md D17). Since D15 no project carries in-source `VULN:`/`SAFE:`
+markers — ground truth is the only record (anti-overfitting).
 
 ## Vulnerability matrix (per project: 17 vulnerable entries + 5 safe)
+
+The sink idioms below are the HTTP targets'; the non-HTTP targets use their
+own per-language idioms (e.g. `pickle.loads`/`Storable::thaw`,
+`DataTable.Compute`, `ScriptEngine.eval`) listed in each `GROUND_TRUTH.md`.
 
 ### Category A — sink-based (Semgrep → sink, Joern → entrypoint)
 

@@ -226,6 +226,56 @@ markers were stripped in-prompt, so they are not label-contaminated, but
 they are no longer reproducible from the current tree, and the enterprise
 target still has no judge baseline at all.
 
+## Non-HTTP targets (2026-10-31)
+
+### D17. Securities-industry non-HTTP targets: language/scenario pairs by industry reality, `entrypoint.route` as trigger descriptor
+
+Gap: all five existing targets are HTTP applications; the taxonomy had no
+coverage of the non-HTTP services that securities/IB firms actually
+develop and expose (the user works at one). Scoping questions: which
+application forms, which languages, which scenarios.
+
+Decisions:
+- **Forms**: message-queue/file-drop workers and FIX-style TCP command
+  gateways — the two families that are both commonly self-developed AND
+  externally exposed in a securities firm. Rejected with evidence:
+  exchange-native binary feed handlers (ITCH/OUCH/STEP) are C++-only in
+  practice and C++ is not in the language set; CLI tools are not
+  externally exposed; generic file-ingestion daemons are not something
+  these firms typically self-develop as exposed services (the securities
+  variant — clearing/reconciliation pipelines — IS, and was kept).
+- **Language↔scenario pairing by industry reality, not one-per-language**:
+  FIX gateways in Java + C# (commercial FIX engines exist only as
+  .NET/C++/Java SDKs; banks Java-heavy, buy-side .NET-heavy);
+  clearing/reconciliation workers in Python + Perl (data-pipeline lingua
+  franca + legacy ops estate). **JS/TS deliberately has no non-HTTP
+  target** — Node's role in securities firms is the web/API tier (already
+  covered by js-ts-express); forcing it would be the equivalent of writing
+  a web app in C++.
+- **Schema**: `ground_truth.json` keeps its existing shape; only
+  `entrypoint.route`'s VALUE becomes a trigger descriptor — `MSG <subject>`
+  / `CMD <command>` / `FILE <kind>`. No new fields, judge compatibility
+  preserved (matching keys on file+function).
+- **Dispatch must be registry-shaped** (`router.register("D", handler)` /
+  `HANDLERS["D"] = fn` / `subscribe(subject, fn)`), never a switch, so
+  tree-sitter and Joern can both see the entrypoints (AGENTS.md records
+  the convention).
+- **Mapper support**: `scripts/repo_map.py` extracts the registration
+  calls into the routes table (`method` MSG/CMD/FILE, extra `kind` key —
+  HTTP routes are unaffected, verified 22/22 route+function hits on all
+  four engine-backed HTTP targets). `llm_judge_entrypoints.py` prompt
+  generalized from "HTTP endpoint" to "externally reachable entrypoint".
+- **Not done (deferred)**: registering the four targets in the agent
+  batch/baseline (same "generate first, register later" path perl-cgi
+  took); `compare_repo_maps.py --check` and the M6 planner's route
+  coverage still assume HTTP-shaped routes (documented in
+  LIMITATIONS.md §4).
+
+New targets: `java-fix-gateway`, `csharp-fix-gateway` (mirror pair),
+`python-clearing-worker`, `perl-clearing-worker` (mirror pair; perl keeps
+its no-engine tier-3 degraded-mode role). 17 vulnerable + 5 safe entries
+each, same taxonomy as the HTTP targets.
+
 ## Roadmap (2026-09-23)
 
 ### D14. Agent productization first; self-evolution deferred

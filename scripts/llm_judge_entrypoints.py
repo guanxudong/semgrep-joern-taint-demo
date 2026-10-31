@@ -9,8 +9,10 @@
 # ///
 """LLM judgment layer for category-B (NON-sink) vulnerability classes.
 
-For every HTTP entrypoint (with the source of the handler plus everything
-reachable from it, extracted forward through the call graph by
+For every externally reachable entrypoint — an HTTP route, a message-bus
+trigger, a gateway command, or a file-drop handler (with the source of the
+handler plus everything reachable from it, extracted forward through the
+call graph by
 analysis/joern/extract_entrypoint_snippets.sc), ask an LLM (DeepSeek via
 pydantic-ai, OpenAI-compatible endpoint) to judge ALL 7 category-B classes
 semantically — idor, business-logic, race-condition, priv-esc,
@@ -71,9 +73,11 @@ B_CLASSES = (
 )
 
 SYSTEM_PROMPT = """\
-You are a senior application-security engineer reviewing ONE HTTP endpoint
-(handler source plus the source of every internal function it can reach,
-entrypoint first). Judge it for the 7 NON-sink vulnerability classes ONLY:
+You are a senior application-security engineer reviewing ONE externally
+reachable entrypoint (an HTTP route, a message-bus trigger, a gateway
+command, or a file-drop handler — handler source plus the source of every
+internal function it can reach, entrypoint first). Judge it for the 7
+NON-sink vulnerability classes ONLY:
 
 - idor: an object is fetched by a user-controlled id with no ownership or
   authorization check that the object belongs to the caller.
@@ -161,7 +165,7 @@ def strip_gt_tags(code: str) -> str:
 def build_prompt(record: dict) -> str:
     ep = record["entrypoint"]
     parts = [
-        f"HTTP endpoint under review: {ep.get('route', '?')}",
+        f"Entrypoint under review: {ep.get('route', '?')}",
         f"Handler: {simple_name(ep.get('method', '?'))} "
         f"({ep.get('file', '?')}:{ep.get('line', '?')})",
         "",

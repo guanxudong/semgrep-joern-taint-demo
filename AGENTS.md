@@ -22,14 +22,6 @@ to benchmark an LLM + Semgrep + Joern SAST pipeline.
 - `targets/js-ts-express/` — Express, mixed .js/.ts (source only)
 - `targets/python-flask/` — Flask blueprints (source only)
 - `targets/csharp-aspnet/` — ASP.NET Core style (source only)
-- `targets/python-flask-enterprise/` — enterprise-style pilot ("OrderFlow"
-  B2B order/inventory API, 2026-09-15): layered `api/` blueprints →
-  `services/` → `repositories/` → `data/`, auth decorators, middleware,
-  ~50 endpoints, 19 vulns + 11 safe mimics.
-- `targets/php-laravel/` — Laravel-style PHP (source only, 2026-09-26).
-  Engines: Semgrep GA + Joern php2cpg (needs a PHP runtime; less mature) —
-  a tier-1 target for testing the full pipeline on a weaker frontend
-  (DECISIONS.md D15). Not yet registered in the agent pipeline.
 - `targets/perl-cgi/` — legacy CGI.pm-style Perl (source only, 2026-09-26):
   one `.pl` script per action under `cgi-bin/` (routes are the script paths
   by filename convention, e.g. `cgi-bin/users/search.pl` →
@@ -37,6 +29,24 @@ to benchmark an LLM + Semgrep + Joern SAST pipeline.
   Semgrep nor Joern supports Perl** — a tier-3 target for the no-engine
   degraded mode (design: `docs/perl-degraded-mode-design.md`, DECISIONS.md
   D10/D15). Not yet registered in the agent pipeline.
+- Non-HTTP securities-industry targets (2026-10-31, DECISIONS.md D17;
+  language↔scenario paired by industry reality, NOT one per language):
+  - `targets/java-fix-gateway` / `targets/csharp-fix-gateway` — FIX-style
+    TCP order gateways (registry dispatch on MsgType, custom text
+    protocol; mirror pair, same domain model).
+  - `targets/python-clearing-worker` / `targets/perl-clearing-worker` —
+    clearing/reconciliation pipelines consuming execution-report messages
+    and settlement file drops (mirror pair; perl keeps its no-engine
+    tier-3 role). Not yet registered in the agent pipeline.
+  - In these targets `ground_truth.json`'s `entrypoint.route` carries a
+    **trigger descriptor** (`MSG <subject>` / `CMD <command>` /
+    `FILE <kind>`) instead of an HTTP route. **Message/file/command
+    dispatch must always be written registry-shaped**
+    (`router.register("D", fn)` / `HANDLERS["D"] = fn` /
+    `subscribe(subject, fn)`) — never a switch — so tree-sitter
+    (`scripts/repo_map.py`, routes table `kind: message|command|file`) and
+    Joern can both see the entrypoints. External dependencies are in-repo
+    stubs or the language standard library (source-only constraint).
 - **No target carries in-source ground-truth markers.** Since 2026-09-26
   (DECISIONS.md D15) the `VULN:`/`SAFE:` comment convention is retired
   everywhere, and source comments must never reveal a vulnerability's
@@ -91,8 +101,10 @@ to benchmark an LLM + Semgrep + Joern SAST pipeline.
   route as fallback). Same CLI shape as `llm_judge_sink_chains.py`.
 - `scripts/repo_map.py` — repo-map generator (tree-sitter, `uv run`, PEP
   723 deps inline; Java/JS/TS/Python/C#). Emits an LLM-consumable Markdown
-  map (directory tree + roles, HTTP route table for Flask/Express/Spring/
-  ASP.NET, per-file symbols, import-level reference graph) plus a JSON twin.
+  map (directory tree + roles, route table for Flask/Express/Spring/
+  ASP.NET plus non-HTTP entrypoints registered via
+  `subscribe`/`register`/`watch` (kind: message/command/file), per-file
+  symbols, import-level reference graph) plus a JSON twin.
   `--check ground_truth.json` cross-checks extracted routes/functions.
   This is the default mapper for unknown repos (zero prerequisites); see
   `analysis/repo_map_compare.md` for the tree-sitter vs Joern comparison.

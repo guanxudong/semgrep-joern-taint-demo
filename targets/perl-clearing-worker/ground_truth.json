@@ -1,0 +1,423 @@
+[
+  {
+    "id": "plcl-sqli-01",
+    "category": "A",
+    "vuln_type": "sqli",
+    "cwe": 89,
+    "expected": "vulnerable",
+    "difficulty": "shallow",
+    "entrypoint": {
+      "route": "MSG reconcile.diff",
+      "file": "lib/MyApp/Handler/Reconciliation.pm",
+      "function": "on_diff_query"
+    },
+    "sink": {
+      "file": "lib/MyApp/Repository/ReconRepo.pm",
+      "function": "find_unmatched",
+      "line_hint": "select_rows"
+    },
+    "chain": [
+      "lib/MyApp/Handler/Reconciliation.pm",
+      "lib/MyApp/Repository/ReconRepo.pm"
+    ],
+    "notes": "Account from the message payload interpolated straight into the WHERE clause."
+  },
+  {
+    "id": "plcl-sqli-02",
+    "category": "A",
+    "vuln_type": "sqli",
+    "cwe": 89,
+    "expected": "vulnerable",
+    "difficulty": "deep",
+    "entrypoint": {
+      "route": "MSG execution.report",
+      "file": "lib/MyApp/Handler/Executions.pm",
+      "function": "on_execution_report"
+    },
+    "sink": {
+      "file": "lib/MyApp/Repository/ReconRepo.pm",
+      "function": "insert_record",
+      "line_hint": "do_sql"
+    },
+    "chain": [
+      "lib/MyApp/Handler/Executions.pm",
+      "lib/MyApp/Service/ReconService.pm",
+      "lib/MyApp/Repository/ReconRepo.pm"
+    ],
+    "notes": "Payload staged in ReconService _pending_* instance fields by stage_execution(), read back by flush_staged(). Field-sensitive analysis required."
+  },
+  {
+    "id": "plcl-xss-01",
+    "category": "A",
+    "vuln_type": "xss",
+    "cwe": 79,
+    "expected": "vulnerable",
+    "difficulty": "shallow",
+    "entrypoint": {
+      "route": "MSG reconcile.done",
+      "file": "lib/MyApp/Handler/Reconciliation.pm",
+      "function": "on_reconcile_done"
+    },
+    "sink": {
+      "file": "lib/MyApp/Service/NotifyService.pm",
+      "function": "render_result_email",
+      "line_hint": "<tr><td>"
+    },
+    "chain": [
+      "lib/MyApp/Handler/Reconciliation.pm",
+      "lib/MyApp/Service/NotifyService.pm"
+    ],
+    "notes": "Unmatched-record rows (symbol/diff) from the message payload concatenated into the HTML result email."
+  },
+  {
+    "id": "plcl-cmdi-01",
+    "category": "A",
+    "vuln_type": "cmdi",
+    "cwe": 78,
+    "expected": "vulnerable",
+    "difficulty": "shallow",
+    "entrypoint": {
+      "route": "MSG notify.send",
+      "file": "lib/MyApp/Handler/Notifications.pm",
+      "function": "on_notify"
+    },
+    "sink": {
+      "file": "lib/MyApp/Service/ArchiveService.pm",
+      "function": "notify_ops",
+      "line_hint": "system("
+    },
+    "chain": [
+      "lib/MyApp/Handler/Notifications.pm",
+      "lib/MyApp/Service/ArchiveService.pm"
+    ],
+    "notes": "Alert title from the message payload concatenated into the pagerduty-send invocation."
+  },
+  {
+    "id": "plcl-cmdi-02",
+    "category": "A",
+    "vuln_type": "cmdi",
+    "cwe": 78,
+    "expected": "vulnerable",
+    "difficulty": "deep",
+    "entrypoint": {
+      "route": "MSG notify.send",
+      "file": "lib/MyApp/Handler/Notifications.pm",
+      "function": "on_notify"
+    },
+    "sink": {
+      "file": "lib/MyApp/Service/ArchiveService.pm",
+      "function": "send_staged_alert",
+      "line_hint": "system("
+    },
+    "chain": [
+      "lib/MyApp/Handler/Notifications.pm",
+      "lib/MyApp/Service/ArchiveService.pm"
+    ],
+    "notes": "Taint stored in the ArchiveService _pending_label instance field by stage_alert(), read by send_staged_alert(). Field-sensitive analysis required."
+  },
+  {
+    "id": "plcl-path-traversal-01",
+    "category": "A",
+    "vuln_type": "path-traversal",
+    "cwe": 22,
+    "expected": "vulnerable",
+    "difficulty": "medium",
+    "entrypoint": {
+      "route": "FILE settlement",
+      "file": "lib/MyApp/Handler/Settlement.pm",
+      "function": "on_settlement_file"
+    },
+    "sink": {
+      "file": "lib/MyApp/Service/ArchiveService.pm",
+      "function": "import_attachment",
+      "line_hint": "open("
+    },
+    "chain": [
+      "lib/MyApp/Handler/Settlement.pm",
+      "lib/MyApp/Service/ArchiveService.pm"
+    ],
+    "notes": "Attachment name taken from the settlement-file header and joined onto the archive directory without normalization."
+  },
+  {
+    "id": "plcl-rce-01",
+    "category": "A",
+    "vuln_type": "rce",
+    "cwe": 94,
+    "expected": "vulnerable",
+    "difficulty": "shallow",
+    "entrypoint": {
+      "route": "MSG alert.rule",
+      "file": "lib/MyApp/Handler/Reconciliation.pm",
+      "function": "on_alert_rule"
+    },
+    "sink": {
+      "file": "lib/MyApp/Service/RuleEngine.pm",
+      "function": "evaluate",
+      "line_hint": "eval $expr"
+    },
+    "chain": [
+      "lib/MyApp/Handler/Reconciliation.pm",
+      "lib/MyApp/Service/RuleEngine.pm"
+    ],
+    "notes": "Rule expression from the message payload passed straight to eval."
+  },
+  {
+    "id": "plcl-xxe-01",
+    "category": "A",
+    "vuln_type": "xxe",
+    "cwe": 611,
+    "expected": "vulnerable",
+    "difficulty": "shallow",
+    "entrypoint": {
+      "route": "FILE settlement",
+      "file": "lib/MyApp/Handler/Settlement.pm",
+      "function": "on_settlement_file"
+    },
+    "sink": {
+      "file": "lib/MyApp/Parser.pm",
+      "function": "parse_settlement_xml",
+      "line_hint": "expand_entities => 1"
+    },
+    "chain": [
+      "lib/MyApp/Handler/Settlement.pm",
+      "lib/MyApp/Parser.pm"
+    ],
+    "notes": "XML::LibXML load_xml with expand_entities enabled and no_network disabled on the settlement XML body."
+  },
+  {
+    "id": "plcl-deserialization-01",
+    "category": "A",
+    "vuln_type": "deserialization",
+    "cwe": 502,
+    "expected": "vulnerable",
+    "difficulty": "shallow",
+    "entrypoint": {
+      "route": "MSG snapshot.load",
+      "file": "lib/MyApp/Handler/Reconciliation.pm",
+      "function": "on_load_snapshot"
+    },
+    "sink": {
+      "file": "lib/MyApp/Service/ReconService.pm",
+      "function": "load_snapshot",
+      "line_hint": "thaw("
+    },
+    "chain": [
+      "lib/MyApp/Handler/Reconciliation.pm",
+      "lib/MyApp/Service/ReconService.pm"
+    ],
+    "notes": "Storable::thaw on the raw blob carried in the message payload."
+  },
+  {
+    "id": "plcl-ssti-01",
+    "category": "A",
+    "vuln_type": "ssti",
+    "cwe": 1336,
+    "expected": "vulnerable",
+    "difficulty": "shallow",
+    "entrypoint": {
+      "route": "MSG notify.send",
+      "file": "lib/MyApp/Handler/Notifications.pm",
+      "function": "on_notify"
+    },
+    "sink": {
+      "file": "lib/MyApp/Service/NotifyService.pm",
+      "function": "render_notice",
+      "line_hint": "[%"
+    },
+    "chain": [
+      "lib/MyApp/Handler/Notifications.pm",
+      "lib/MyApp/Service/NotifyService.pm"
+    ],
+    "notes": "Legacy [% ... %] template compiled with the double-eval substitution modifier, evaluating directives embedded in the template text."
+  },
+  {
+    "id": "plcl-idor-01",
+    "category": "B",
+    "vuln_type": "idor",
+    "cwe": 639,
+    "expected": "vulnerable",
+    "difficulty": "medium",
+    "entrypoint": {
+      "route": "MSG reconcile.request",
+      "file": "lib/MyApp/Handler/Reconciliation.pm",
+      "function": "on_request"
+    },
+    "chain": [
+      "lib/MyApp/Handler/Reconciliation.pm",
+      "lib/MyApp/Service/ReconService.pm"
+    ],
+    "notes": "Fetches any account's fund statement by payload account; the requester header is never compared against it."
+  },
+  {
+    "id": "plcl-business-logic-01",
+    "category": "B",
+    "vuln_type": "business-logic",
+    "cwe": 840,
+    "expected": "vulnerable",
+    "difficulty": "medium",
+    "entrypoint": {
+      "route": "FILE settlement",
+      "file": "lib/MyApp/Handler/Settlement.pm",
+      "function": "on_settlement_file"
+    },
+    "chain": [
+      "lib/MyApp/Handler/Settlement.pm",
+      "lib/MyApp/Service/ReconService.pm"
+    ],
+    "notes": "apply_settlement records file_id in _processed_files but never consults it, so re-dropping the same settlement file books every row twice; small negative in-tolerance diffs are also auto-booked onto the ROUNDING account."
+  },
+  {
+    "id": "plcl-race-condition-01",
+    "category": "B",
+    "vuln_type": "race-condition",
+    "cwe": 367,
+    "expected": "vulnerable",
+    "difficulty": "medium",
+    "entrypoint": {
+      "route": "MSG execution.report",
+      "file": "lib/MyApp/Handler/Executions.pm",
+      "function": "on_execution_report"
+    },
+    "chain": [
+      "lib/MyApp/Handler/Executions.pm",
+      "lib/MyApp/Service/MoneyService.pm"
+    ],
+    "notes": "Check-then-act on the balances hash in MoneyService::adjust without a lock; concurrent execution reports overspend the same account."
+  },
+  {
+    "id": "plcl-priv-esc-01",
+    "category": "B",
+    "vuln_type": "priv-esc",
+    "cwe": 269,
+    "expected": "vulnerable",
+    "difficulty": "shallow",
+    "entrypoint": {
+      "route": "FILE settlement",
+      "file": "lib/MyApp/Handler/Settlement.pm",
+      "function": "on_settlement_file"
+    },
+    "chain": [
+      "lib/MyApp/Handler/Settlement.pm",
+      "lib/MyApp/Service/ReconService.pm"
+    ],
+    "notes": "operator_role is taken from the settlement-file header; role=admin routes to admin_adjust() which moves money for any account in the file."
+  },
+  {
+    "id": "plcl-mass-assignment-01",
+    "category": "B",
+    "vuln_type": "mass-assignment",
+    "cwe": 915,
+    "expected": "vulnerable",
+    "difficulty": "shallow",
+    "entrypoint": {
+      "route": "MSG execution.report",
+      "file": "lib/MyApp/Handler/Executions.pm",
+      "function": "on_execution_report"
+    },
+    "chain": [
+      "lib/MyApp/Handler/Executions.pm"
+    ],
+    "notes": "Hash-assignment loop copies every payload key onto the record hash, including internal fields a sender should not control."
+  },
+  {
+    "id": "plcl-broken-access-control-01",
+    "category": "B",
+    "vuln_type": "broken-access-control",
+    "cwe": 862,
+    "expected": "vulnerable",
+    "difficulty": "shallow",
+    "entrypoint": {
+      "route": "MSG ops.run_batch",
+      "file": "lib/MyApp/Handler/Reconciliation.pm",
+      "function": "on_run_batch"
+    },
+    "chain": [
+      "lib/MyApp/Handler/Reconciliation.pm",
+      "lib/MyApp/Service/ReconService.pm"
+    ],
+    "notes": "The privileged full re-reconcile can be triggered by anyone able to publish ops.run_batch; there is no operator check at all."
+  },
+  {
+    "id": "plcl-auth-flaws-01",
+    "category": "B",
+    "vuln_type": "auth-flaws",
+    "cwe": 287,
+    "expected": "vulnerable",
+    "difficulty": "medium",
+    "entrypoint": {
+      "route": "MSG reconcile.request",
+      "file": "lib/MyApp/Handler/Reconciliation.pm",
+      "function": "on_request"
+    },
+    "chain": [
+      "lib/MyApp/Handler/Reconciliation.pm",
+      "lib/MyApp/Config.pm"
+    ],
+    "notes": "Request token is md5(account|date) with no secret, so anyone can forge it; the SFTP password used to deliver statements is hardcoded in lib/MyApp/Config.pm."
+  },
+  {
+    "id": "plcl-safe-01",
+    "category": "A",
+    "vuln_type": "sqli",
+    "cwe": 89,
+    "expected": "safe",
+    "entrypoint": {
+      "route": "MSG reconcile.diff_safe",
+      "file": "lib/MyApp/Handler/Reconciliation.pm",
+      "function": "on_diff_query_safe"
+    },
+    "notes": "Parameterized query via find_unmatched_safe; a correct tool must NOT report this."
+  },
+  {
+    "id": "plcl-safe-02",
+    "category": "B",
+    "vuln_type": "idor",
+    "cwe": 639,
+    "expected": "safe",
+    "entrypoint": {
+      "route": "MSG reconcile.request_safe",
+      "file": "lib/MyApp/Handler/Reconciliation.pm",
+      "function": "on_request_safe"
+    },
+    "notes": "Requester header must equal the requested account before the statement is fetched."
+  },
+  {
+    "id": "plcl-safe-03",
+    "category": "A",
+    "vuln_type": "xxe",
+    "cwe": 611,
+    "expected": "safe",
+    "entrypoint": {
+      "route": "FILE settlement_safe",
+      "file": "lib/MyApp/Handler/Settlement.pm",
+      "function": "on_settlement_file_safe"
+    },
+    "notes": "Entity expansion disabled (expand_entities => 0) and network access off."
+  },
+  {
+    "id": "plcl-safe-04",
+    "category": "A",
+    "vuln_type": "path-traversal",
+    "cwe": 22,
+    "expected": "safe",
+    "entrypoint": {
+      "route": "FILE settlement_safe",
+      "file": "lib/MyApp/Handler/Settlement.pm",
+      "function": "on_settlement_file_safe"
+    },
+    "notes": "Attachment name checked against a strict allow-list regex before reading."
+  },
+  {
+    "id": "plcl-safe-05",
+    "category": "B",
+    "vuln_type": "race-condition",
+    "cwe": 367,
+    "expected": "safe",
+    "entrypoint": {
+      "route": "MSG execution.report_safe",
+      "file": "lib/MyApp/Handler/Executions.pm",
+      "function": "on_execution_report_safe"
+    },
+    "notes": "Balance adjustment guarded by flock in MoneyService::adjust_locked."
+  }
+]
