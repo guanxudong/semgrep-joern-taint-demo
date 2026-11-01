@@ -4,6 +4,7 @@
 // Usage:
 //   joern --script analysis/joern/forward_from_entrypoints.sc <cpg.bin>
 import io.shiftleft.semanticcpg.language._
+import io.shiftleft.codepropertygraph.generated.nodes.Method
 
 val sinkNames = Map(
   "python" -> "^(execute|executemany|system|popen|eval|exec|loads|load|render_template_string|from_string|fromstring|parse|parseString|XMLParser|send_file|open)$",
@@ -16,6 +17,30 @@ val lang = if (cpg.file.name(".*\\.java$").nonEmpty) "java"
            else "js"
 val nameRe = sinkNames(lang)
 
+// ---- registry dispatch entrypoints (non-HTTP targets, D17) — copied
+// verbatim from backward_from_sinks.sc, keep in sync ----
+def resolveHandler(arg: io.shiftleft.codepropertygraph.generated.nodes.Expression): Option[Method] =
+  arg.start.isMethodRef.referencedMethod.l.headOption.orElse {
+    "[A-Za-z_][A-Za-z0-9_]*$".r.findFirstMatchIn(arg.code.trim).map(_.group(0))
+      .flatMap(n => cpg.method.nameExact(n).l.headOption)
+  }
+
+val registryEntries: List[(Method, String)] = lang match {
+  case "java" =>
+    cpg.call.nameExact("register").l.flatMap { c =>
+      val key = c.argument(1).code.trim.replaceAll("^\"|\"$", "")
+      resolveHandler(c.argument(2)).map(_ -> s"CMD $key")
+    }
+  case "python" =>
+    cpg.call.nameExact("subscribe").l.flatMap { c =>
+      val subj = c.argument(1).code.trim.replaceAll("^'|'$|^\"|\"$", "")
+      resolveHandler(c.argument(2)).map(_ -> s"MSG $subj")
+    } ++ cpg.call.nameExact("watch").l.flatMap { c =>
+      resolveHandler(c.argument(2)).map(_ -> s"FILE ${c.argument(1).code.trim}")
+    }
+  case _ => Nil
+}
+
 // ---- transpiled-JSP entrypoints (D9): pages/X_jsp.java::_jspService ----
 // (see backward_from_sinks.sc for the route-label convention)
 val jspEntrypoints: List[(String, String)] =
@@ -26,7 +51,7 @@ val jspEntrypoints: List[(String, String)] =
   }
 
 // ---- entrypoints (same detection as find_entrypoints.sc) ----
-val entrypoints: List[(String, String)] = lang match {
+val entrypoints: List[(String, String)] = (lang match {
   case "java" =>
     cpg.method.where(_.annotation.name(".*(Get|Post|Put|Delete|Patch)Mapping")).l.map { m =>
       val ann = m.annotation.name(".*Mapping").code.headOption.getOrElse("")
@@ -42,7 +67,7 @@ val entrypoints: List[(String, String)] = lang match {
         h.fullName -> s"${c.name.toUpperCase} ${c.argument(1).code}"
       }
     }
-}
+}) ++ registryEntries.map { case (m, r) => m.fullName -> r }
 
 // ---- forward BFS (indent = call depth) ----
 def forward(rootFullName: String, maxDepth: Int = 6): Unit = {

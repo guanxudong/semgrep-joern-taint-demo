@@ -33,6 +33,34 @@ val lang = if (cpg.file.name(".*\\.java$").nonEmpty) "java"
            else "js"
 val nameRe = sinkNames(lang)
 
+// ---- registry dispatch entrypoints (non-HTTP targets, D17) ----
+// router.register("KEY", obj::handler) -> "CMD KEY"; bus.subscribe("subj", fn)
+// -> "MSG subj"; watcher.watch(dir, fn) -> "FILE dir". Scorers match on
+// file+function, so the route label only needs to carry the registry key.
+// No such call shapes exist in the web targets (verified), so this is a
+// no-op there.
+def resolveHandler(arg: io.shiftleft.codepropertygraph.generated.nodes.Expression): Option[Method] =
+  arg.start.isMethodRef.referencedMethod.l.headOption.orElse {
+    "[A-Za-z_][A-Za-z0-9_]*$".r.findFirstMatchIn(arg.code.trim).map(_.group(0))
+      .flatMap(n => cpg.method.nameExact(n).l.headOption)
+  }
+
+val registryEntries: List[(Method, String)] = lang match {
+  case "java" =>
+    cpg.call.nameExact("register").l.flatMap { c =>
+      val key = c.argument(1).code.trim.replaceAll("^\"|\"$", "")
+      resolveHandler(c.argument(2)).map(_ -> s"CMD $key")
+    }
+  case "python" =>
+    cpg.call.nameExact("subscribe").l.flatMap { c =>
+      val subj = c.argument(1).code.trim.replaceAll("^'|'$|^\"|\"$", "")
+      resolveHandler(c.argument(2)).map(_ -> s"MSG $subj")
+    } ++ cpg.call.nameExact("watch").l.flatMap { c =>
+      resolveHandler(c.argument(2)).map(_ -> s"FILE ${c.argument(1).code.trim}")
+    }
+  case _ => Nil
+}
+
 // ---- transpiled-JSP entrypoints (D9): pages/X_jsp.java::_jspService ----
 // Route label by filename convention: pages/user_search_jsp.java ->
 // user_search_jsp "/user_search.jsp" (mirrors manifest.json routes; the
@@ -45,7 +73,7 @@ val jspEntrypoints: Map[String, String] =
   }.toMap
 
 // ---- entrypoint method fullNames (same detection as find_entrypoints.sc) ----
-val entrypoints: Map[String, String] = lang match {
+val entrypoints: Map[String, String] = (lang match {
   case "java" =>
     (cpg.method.where(_.annotation.name(".*(Get|Post|Put|Delete|Patch)Mapping")).l.map { m =>
       val ann = m.annotation.name(".*Mapping").code.headOption.getOrElse("")
@@ -61,7 +89,7 @@ val entrypoints: Map[String, String] = lang match {
         h.fullName -> s"${c.name.toUpperCase} ${c.argument(1).code}"
       }
     }.toMap
-}
+}) ++ registryEntries.map { case (m, r) => m.fullName -> r }.toMap
 
 // ---- JS ghost-callee repair (D5) ----
 // jssrc2cpg resolves `userService.findStaged(...)` (require-based import) to

@@ -29,15 +29,15 @@ to benchmark an LLM + Semgrep + Joern SAST pipeline.
   degraded mode (design: `docs/perl-degraded-mode-design.md`, DECISIONS.md
   D10/D15). Not yet registered in the agent pipeline.
 - Non-HTTP securities-industry targets (2026-10-31, DECISIONS.md D17;
-  language↔scenario paired by industry reality, NOT one per language):
+  registered in the pipeline 2026-11-01; language↔scenario paired by
+  industry reality, NOT one per language):
   - `targets/java-fix-gateway` — FIX-style TCP order gateway (registry
     dispatch on MsgType, custom text protocol). (Its C# mirror
     `csharp-fix-gateway` was removed on 2026-11-01 with `csharp-aspnet`:
     csharpsrc2cpg cannot rebuild a CPG on this arm64 host.)
   - `targets/python-clearing-worker` — clearing/reconciliation pipeline
     consuming execution-report messages and settlement file drops
-    (its Perl mirror was removed on 2026-11-01 as redundant). Not yet
-    registered in the agent pipeline.
+    (its Perl mirror was removed on 2026-11-01 as redundant).
   - In these targets `ground_truth.json`'s `entrypoint.route` carries a
     **trigger descriptor** (`MSG <subject>` / `CMD <command>` /
     `FILE <kind>`) instead of an HTTP route. **Message/file/command

@@ -108,25 +108,24 @@ the open weaknesses now live in the judgment/agent layer, not the engine.
 Evidence for each item: the retired `agent/HANDOFF.md` and the pruned
 PROGRESS.md entries (git history).
 
-- **Non-HTTP targets are generated but not yet pipeline-wired (D17,
-  2026-10-31).** The securities-industry targets (`java-fix-gateway`,
+- **Non-HTTP targets: engine-wired 2026-11-01, judgment layer unproven
+  (D17).** The securities-industry targets (`java-fix-gateway`,
   `python-clearing-worker` — `csharp-fix-gateway` and
-  `perl-clearing-worker` were removed 2026-11-01) carry
-  full ground truth and their entrypoints
-  are extractable by `repo_map.py` (registry-shaped dispatch,
-  `kind: message|command|file`), but the rest of the pipeline is still
-  HTTP-shaped: (a) `analysis/joern/extract_entrypoint_snippets.sc` only
-  enumerates framework-annotated HTTP entrypoints, so the category-B joern
-  path finds no handlers in these targets; (b) `taint_confirm.sc` sources
-  don't include message-payload / command-tag reads, so A-class chains
-  won't confirm even though the sinks (os.system, eval, pickle.loads,
-  `readObject`, ...) still match the Semgrep rules; (c)
+  `perl-clearing-worker` were removed 2026-11-01) are registered in
+  `run_baseline.py` / `config.py` TARGETS, and the joern scripts now see
+  registry dispatch: `router.register("KEY", obj::handler)` → `CMD KEY`,
+  `bus.subscribe("subj", fn)` → `MSG subj`, `watcher.watch(dir, fn)` →
+  `FILE dir`, with handler parameters as taint sources (backward chains +
+  taint confirm measured working: 9/10 and 13/13 sinks with chains,
+  9/10 and 5/14 chains CONFIRMED). What remains HTTP-shaped: (a)
   `compare_repo_maps.py --check` and the M6 planner's route-coverage check
   compare HTTP-style routes, so `MSG <subject>` / `CMD <cmd>` / `FILE`
   triggers score as route misses (function hits still match; measured
-  16/22 and 7/22 route hits on the two new engine-backed targets). The B
-  judge's prompt wording was generalized ("externally reachable
-  entrypoint"); matching keys on file+function and is unaffected.
+  16/22 and 7/22 route hits on the two new engine-backed targets); (b)
+  the A/B LLM layers have not yet been batch-run against these targets,
+  so recall/FP on them is unmeasured; (c) pysrc2cpg's DFG loses
+  dict/subscript flows, so python-clearing-worker taint confirm sits at
+  5/14 — the tracer is expected to continue those chains at runtime.
 
 - **Judgment-layer model drift.** DeepSeek endpoint drift has flipped
   verdicts (A-class FNs java-cmdi-01/02; safe-02 flipped to FP on 4

@@ -94,6 +94,14 @@ JOERN_PARSE = find_joern_parse()
 # Same shape as agent/run_baseline.py TARGETS.
 # (python-flask-enterprise was user-deleted in D17/9947ba2 — do not
 # re-register without restoring the tree.)
+#
+# The two non-HTTP targets (2026-11-01, user decision: everything under
+# targets/ is in the test loop) use trigger-descriptor routes
+# ("MSG <subject>" / "CMD <cmd>" / "FILE <kind>") and registry-shaped
+# dispatch. Engine coverage is still HTTP-shaped in places (see
+# LIMITATIONS.md §4): entrypoint detection and taint sources only see
+# message/command/file reads since the same-day joern extension, and
+# route-shape checks may score misses where function hits still work.
 TARGETS = {
     "python-flask": {
         "rules": "analysis/rules/sinks-python.yml",
@@ -109,6 +117,16 @@ TARGETS = {
         "rules": "analysis/rules/sinks-js.yml",
         "tree": "targets/js-ts-express",
         "ground_truth": "targets/js-ts-express/ground_truth.json",
+    },
+    "java-fix-gateway": {
+        "rules": "analysis/rules/sinks-java.yml",
+        "tree": "targets/java-fix-gateway",
+        "ground_truth": "targets/java-fix-gateway/ground_truth.json",
+    },
+    "python-clearing-worker": {
+        "rules": "analysis/rules/sinks-python.yml",
+        "tree": "targets/python-clearing-worker",
+        "ground_truth": "targets/python-clearing-worker/ground_truth.json",
     },
 }
 

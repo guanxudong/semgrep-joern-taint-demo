@@ -51,13 +51,37 @@ val lang = if (cpg.file.name(".*\\.java$").nonEmpty) "java"
            else if (cpg.file.name(".*\\.py$").nonEmpty) "python"
            else "js"
 
+// ---- registry dispatch entrypoints (non-HTTP targets, D17) — copied
+// verbatim from backward_from_sinks.sc, keep in sync ----
+def resolveHandler(arg: io.shiftleft.codepropertygraph.generated.nodes.Expression): Option[Method] =
+  arg.start.isMethodRef.referencedMethod.l.headOption.orElse {
+    "[A-Za-z_][A-Za-z0-9_]*$".r.findFirstMatchIn(arg.code.trim).map(_.group(0))
+      .flatMap(n => cpg.method.nameExact(n).l.headOption)
+  }
+
+val registryEntries: List[(Method, String)] = lang match {
+  case "java" =>
+    cpg.call.nameExact("register").l.flatMap { c =>
+      val key = c.argument(1).code.trim.replaceAll("^\"|\"$", "")
+      resolveHandler(c.argument(2)).map(_ -> s"CMD $key")
+    }
+  case "python" =>
+    cpg.call.nameExact("subscribe").l.flatMap { c =>
+      val subj = c.argument(1).code.trim.replaceAll("^'|'$|^\"|\"$", "")
+      resolveHandler(c.argument(2)).map(_ -> s"MSG $subj")
+    } ++ cpg.call.nameExact("watch").l.flatMap { c =>
+      resolveHandler(c.argument(2)).map(_ -> s"FILE ${c.argument(1).code.trim}")
+    }
+  case _ => Nil
+}
+
 // strip @(Route|HttpGet|...Mapping)("...") wrappers down to the raw path
 def routeFromAttr(code: String): String =
   code.replaceAll("(?i)^@?(route|http(get|post|put|delete|patch)|[a-z]+mapping)\\(", "")
       .replaceAll("\\)$", "").replaceAll("\"", "")
 
 // ---- entrypoints: (method fullName, route label) — same detection as find_entrypoints.sc ----
-val entrypoints: List[(String, String)] = lang match {
+val entrypoints: List[(String, String)] = (lang match {
   case "java" =>
     cpg.method.where(_.annotation.name(".*(Get|Post|Put|Delete|Patch)Mapping")).l.map { m =>
       val base = m.typeDecl.annotation.name("RequestMapping").code.headOption.map(routeFromAttr).getOrElse("")
@@ -89,7 +113,7 @@ val entrypoints: List[(String, String)] = lang match {
         h.fullName -> s"${c.name.toUpperCase} $route"
       }
     }
-}
+}) ++ registryEntries.map { case (m, r) => m.fullName -> r }
 
 // ---- forward BFS over the call graph (caller -> callee, internal only) ----
 def forwardCallees(root: Method, maxDepth: Int = 5, maxMethods: Int = 15): List[Method] = {

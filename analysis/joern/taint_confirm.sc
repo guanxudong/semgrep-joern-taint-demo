@@ -15,6 +15,7 @@
 // Diagnostics go to stderr.
 import io.shiftleft.semanticcpg.language._
 import io.shiftleft.codepropertygraph.generated.nodes
+import io.shiftleft.codepropertygraph.generated.nodes.Method
 import java.nio.file.{Files, Paths}
 
 // Sink name table, aligned with analysis/rules/sinks-*.yml. Used both for
@@ -30,6 +31,36 @@ val lang = if (cpg.file.name(".*\\.java$").nonEmpty) "java"
            else if (cpg.file.name(".*\\.py$").nonEmpty) "python"
            else "js"
 val nameRe = sinkNames(lang)
+
+// ---- registry dispatch sources (non-HTTP targets, D17) — handlers
+// registered via router.register / bus.subscribe / watcher.watch receive
+// the attacker-controlled message/command/file object as a parameter, so
+// their parameters are taint sources (same idea as the Spring annotated-
+// parameter sources below). No-op for the web targets. Same registry scan
+// as backward_from_sinks.sc, keep in sync. ----
+def resolveHandler(arg: io.shiftleft.codepropertygraph.generated.nodes.Expression): Option[Method] =
+  arg.start.isMethodRef.referencedMethod.l.headOption.orElse {
+    "[A-Za-z_][A-Za-z0-9_]*$".r.findFirstMatchIn(arg.code.trim).map(_.group(0))
+      .flatMap(n => cpg.method.nameExact(n).l.headOption)
+  }
+
+val registryEntries: List[(Method, String)] = lang match {
+  case "java" =>
+    cpg.call.nameExact("register").l.flatMap { c =>
+      val key = c.argument(1).code.trim.replaceAll("^\"|\"$", "")
+      resolveHandler(c.argument(2)).map(_ -> s"CMD $key")
+    }
+  case "python" =>
+    cpg.call.nameExact("subscribe").l.flatMap { c =>
+      val subj = c.argument(1).code.trim.replaceAll("^'|'$|^\"|\"$", "")
+      resolveHandler(c.argument(2)).map(_ -> s"MSG $subj")
+    } ++ cpg.call.nameExact("watch").l.flatMap { c =>
+      resolveHandler(c.argument(2)).map(_ -> s"FILE ${c.argument(1).code.trim}")
+    }
+  case _ => Nil
+}
+val registryParams: List[nodes.CfgNode] =
+  registryEntries.map(_._1).flatMap(_.parameter.l).cast[nodes.CfgNode].toList
 
 // ---- taint sources ----
 // Call-based sources: direct request-input accessor calls.
@@ -54,7 +85,8 @@ val callSourceRe = lang match {
 def sources = lang match {
   case "java" =>
     cpg.call.code(callSourceRe).cast[nodes.CfgNode] ++
-    cpg.parameter.where(_.annotation.name(".*(RequestParam|RequestBody|RequestHeader|PathVariable|ModelAttribute|RequestPart|PathParam|QueryParam|FormParam|HeaderParam|BeanParam)")).cast[nodes.CfgNode]
+    cpg.parameter.where(_.annotation.name(".*(RequestParam|RequestBody|RequestHeader|PathVariable|ModelAttribute|RequestPart|PathParam|QueryParam|FormParam|HeaderParam|BeanParam)")).cast[nodes.CfgNode] ++
+    registryParams
   case "python" =>
     val placeholderCalls = cpg.call.name("^(route|get|post|put|delete|patch|api_route)$")
       .where(_.argument.code(".*(<[^>]+>|[{][^{}]+[}]).*")).l
@@ -64,7 +96,8 @@ def sources = lang match {
         .sortBy(_.lineNumber.getOrElse(-1)).l.headOption
     }
     cpg.call.code(callSourceRe).cast[nodes.CfgNode] ++
-    routeHandlers.flatMap(_.parameter.l).cast[nodes.CfgNode]
+    routeHandlers.flatMap(_.parameter.l).cast[nodes.CfgNode] ++
+    registryParams
   case _ =>
     cpg.call.code(callSourceRe).cast[nodes.CfgNode]
 }

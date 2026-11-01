@@ -8,6 +8,7 @@
 //   java-spring   : methods with @GetMapping/@PostMapping/... annotations
 //   js-ts-express : router.get/post/... call sites; handler is the <lambda>N via METHOD_REF
 import io.shiftleft.semanticcpg.language._
+import io.shiftleft.codepropertygraph.generated.nodes.Method
 
 def esc(s: String): String = s.replace("\\", "\\\\").replace("\"", "\\\"")
 
@@ -18,6 +19,30 @@ def routeFromAttr(code: String): String =
 val lang = if (cpg.file.name(".*\\.java$").nonEmpty) "java"
            else if (cpg.file.name(".*\\.py$").nonEmpty) "python"
            else "js"
+
+// ---- registry dispatch entrypoints (non-HTTP targets, D17) — same logic
+// as backward_from_sinks.sc, keep in sync ----
+def resolveHandler(arg: io.shiftleft.codepropertygraph.generated.nodes.Expression): Option[Method] =
+  arg.start.isMethodRef.referencedMethod.l.headOption.orElse {
+    "[A-Za-z_][A-Za-z0-9_]*$".r.findFirstMatchIn(arg.code.trim).map(_.group(0))
+      .flatMap(n => cpg.method.nameExact(n).l.headOption)
+  }
+
+val registryEntries: List[(Method, String)] = lang match {
+  case "java" =>
+    cpg.call.nameExact("register").l.flatMap { c =>
+      val key = c.argument(1).code.trim.replaceAll("^\"|\"$", "")
+      resolveHandler(c.argument(2)).map(_ -> s"CMD $key")
+    }
+  case "python" =>
+    cpg.call.nameExact("subscribe").l.flatMap { c =>
+      val subj = c.argument(1).code.trim.replaceAll("^'|'$|^\"|\"$", "")
+      resolveHandler(c.argument(2)).map(_ -> s"MSG $subj")
+    } ++ cpg.call.nameExact("watch").l.flatMap { c =>
+      resolveHandler(c.argument(2)).map(_ -> s"FILE ${c.argument(1).code.trim}")
+    }
+  case _ => Nil
+}
 
 lang match {
   case "java" =>
@@ -52,4 +77,9 @@ lang match {
       val mLine = handler.flatMap(_.lineNumber).getOrElse(-1)
       println(s"""{"lang":"js","route":"${c.name.toUpperCase} ${esc(route)}","method":"${esc(mName)}","file":"${esc(c.file.name.headOption.getOrElse("?"))}","line":$mLine}""")
     }
+}
+
+// registry dispatch (non-HTTP targets): same entries as the HTTP table above
+registryEntries.foreach { case (m, route) =>
+  println(s"""{"lang":"$lang","route":"${esc(route)}","method":"${esc(m.fullName)}","file":"${esc(m.file.name.headOption.getOrElse("?"))}","line":${m.lineNumber.getOrElse(-1)}}""")
 }

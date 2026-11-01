@@ -182,10 +182,16 @@ Decisions:
 - **Mapper support**: `scripts/repo_map.py` extracts the registration
   calls into the routes table (`method` MSG/CMD/FILE, extra `kind` key —
   HTTP routes are unaffected).
-- **Not done (deferred)**: registering the non-HTTP targets in the agent
-  batch/baseline (same "generate first, register later" path perl-cgi
-  took); `compare_repo_maps.py --check` and the planner's route coverage
-  still assume HTTP-shaped routes (documented in LIMITATIONS.md §4).
+- **Registration (done 2026-11-01, user decision)**: both targets are in
+  `run_baseline.py` / `config.py` TARGETS, and the joern scripts gained
+  the same registry scan (register/subscribe/watch → CMD/MSG/FILE
+  entrypoints, handler parameters as taint sources; copied verbatim
+  across 7 scripts, same convention as the M9.0-lite sink block).
+  Measured on first freeze: 9/10 and 13/13 sinks with backward chains,
+  9/10 and 5/14 chains taint-CONFIRMED. Still open: route-shape checks
+  (`compare_repo_maps.py --check`, planner coverage) assume HTTP routes —
+  function hits still match (LIMITATIONS.md §4); the A/B LLM layers have
+  not been batch-run on these targets yet.
 
 Current non-HTTP targets: `java-fix-gateway` and `python-clearing-worker`
 (`perl-clearing-worker` was removed on 2026-11-01 as redundant; perl-cgi

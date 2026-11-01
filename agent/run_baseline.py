@@ -125,8 +125,24 @@ TARGETS = {
         "tree": "targets/js-ts-express",
         "ground_truth": "targets/js-ts-express/ground_truth.json",
     },
+    # Non-HTTP registry-dispatch targets (2026-11-01: everything under
+    # targets/ joins the test loop). Trigger-descriptor routes, sink
+    # rulesets shared with their web stacks; engine HTTP-shape limits
+    # documented in LIMITATIONS.md §4.
+    "java-fix-gateway": {
+        "rules": "analysis/rules/sinks-java.yml",
+        "tree": "targets/java-fix-gateway",
+        "ground_truth": "targets/java-fix-gateway/ground_truth.json",
+    },
+    "python-clearing-worker": {
+        "rules": "analysis/rules/sinks-python.yml",
+        "tree": "targets/python-clearing-worker",
+        "ground_truth": "targets/python-clearing-worker/ground_truth.json",
+    },
     # csharp-aspnet removed 2026-11-01: csharpsrc2cpg cannot rebuild its CPG
     # on this arm64 host (LIMITATIONS.md §3), so it is out of the benchmark.
+    # perl-cgi is the deliberate no-engine tier-3 case (D10): semgrep and
+    # joern cannot parse Perl, so it can never join this engine pipeline.
 }
 
 
