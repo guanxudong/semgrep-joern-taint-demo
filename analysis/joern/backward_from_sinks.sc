@@ -276,7 +276,22 @@ sinkCalls.foreach { case (s, meta) =>
       val route = entrypoints(chain.head.fullName)
       s"""{"route":${q(route)},"entrypoint":${q(chain.head.fullName)},"path":[${chain.map(m => q(m.fullName)).mkString(",")}]}"""
     }.mkString(",")
-    w.println(s"""{"sink":{"name":${q(s.name)},"file":${q(file)},"line":$line,"rule":${q(meta("rule"))},"vuln_type":${q(meta("vuln_type"))}},"chains":[$chainsJson]}""")
+    // M9.1: when no chain reaches an entrypoint, record WHERE the backward
+    // walk stalled so the tracer (agent/sast_agent/tracer.py) starts from
+    // the dead-end scene instead of re-deriving it: the sink's method plus
+    // its call sites whose callee the engine could not resolve (external
+    // ghost callees), with the receiver name for LLM disambiguation.
+    val deadEndJson =
+      if (allChains.nonEmpty) ""
+      else {
+        val unresolved = s.method.call.where(_.callee.isExternal).l.map { c =>
+          val recv = "^([A-Za-z_$][A-Za-z0-9_$]*)\\.".r
+            .findFirstMatchIn(c.code.trim).map(_.group(1)).getOrElse("")
+          s"""{"code":${q(c.code.take(200))},"name":${q(c.name)},"receiver":${q(recv)},"line":${c.lineNumber.getOrElse(-1)}}"""
+        }.mkString(",")
+        s""","dead_end":{"method":${q(inMethod)},"file":${q(file)},"line":$line,"unresolved_calls":[$unresolved]}"""
+      }
+    w.println(s"""{"sink":{"name":${q(s.name)},"file":${q(file)},"line":$line,"rule":${q(meta("rule"))},"vuln_type":${q(meta("vuln_type"))}},"chains":[$chainsJson]$deadEndJson}""")
     w.flush()
   }
 }

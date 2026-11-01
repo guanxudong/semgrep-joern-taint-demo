@@ -521,6 +521,38 @@ def validate_finding(f: dict, tree: Path) -> list[str]:
                         f"evidence file {rel!r} has no supporting tool call "
                         f"(segment jump not backed by a tool result)")
 
+    # tracer (A-class v2) llm_inferred hops: every hop the LLM added to the
+    # path must carry a justify_ref that resolves on disk AND whose cited
+    # lines contain the hop's identifier — an unverifiable continuation
+    # edge is the hallucination bottom line (plan M9.4) and must downgrade.
+    for hop in f.get("stats", {}).get("trace", []):
+        if not isinstance(hop, dict) or hop.get("edge") != "llm_inferred":
+            continue
+        ref = (hop.get("justify_ref") or "").strip()
+        m = _REF_RE.match(ref)
+        label = hop.get("method", "?")
+        if not m:
+            violations.append(
+                f"llm_inferred hop {label!r} has no resolvable justify_ref "
+                f"({ref!r})")
+            continue
+        rel, start, end = m.group(1), int(m.group(2)), int(m.group(3) or m.group(2))
+        path = (tree / rel).resolve()
+        ok = False
+        if os.path.basename(rel) not in _GROUND_TRUTH_NAMES \
+                and (tree in path.parents or path == tree) and path.is_file():
+            lines = path.read_text(errors="replace").splitlines()
+            if 1 <= start <= end <= len(lines):
+                slice_text = "\n".join(lines[start - 1:end])
+                # the hop's identifier (method simple name or variable)
+                # must appear in the cited lines
+                simple = re.split(r"[.:]", label)[-1] if label else ""
+                ok = not simple or simple in slice_text
+        if not ok:
+            violations.append(
+                f"llm_inferred hop {label!r}: justify_ref {ref!r} does not "
+                "resolve to lines containing the hop identifier")
+
     # red line §9.4: CONFIRMED needs an exploit sketch and checkable refs
     if f.get("confidence_level") == "CONFIRMED":
         if not f.get("exploit_sketch"):

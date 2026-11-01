@@ -159,6 +159,23 @@ def textCallers(m: Method): List[Method] =
   })
 
 // ---- sink calls: (call node, optional semgrep metadata) ----
+// Sink matching aligned with backward_from_sinks.sc / taint_confirm.sc
+// (M9.0-lite: replpp has no cross-file import, so the block is copied
+// verbatim — keep the three files in sync): name-first within a ±3 window
+// with kind ranking (name < methodFullName < `new X(...)` code), so
+// constructor sinks (`new Template`, `new FileInputStream`) and off-by-one
+// Semgrep line hints pick the same node in every script.
+def simpleNameOf(mfn: String): String = {
+  val noSig = mfn.split(":").headOption.getOrElse(mfn)
+  noSig.split("\\.").toList.filter(_.nonEmpty).reverse
+    .dropWhile(n => n == "<init>" || n == "<clinit>").headOption.getOrElse(noSig)
+}
+def sinkNameKind(c: io.shiftleft.codepropertygraph.generated.nodes.Call): Int =
+  if (c.name.matches(nameRe)) 0
+  else if (simpleNameOf(c.methodFullName).matches(nameRe)) 1
+  else if ("\\bnew\\s+([A-Za-z_][A-Za-z0-9_]*)".r.findFirstMatchIn(c.code).exists(_.group(1).matches(nameRe))) 2
+  else 3
+
 val sinkCalls: List[(io.shiftleft.codepropertygraph.generated.nodes.Call, Map[String, String])] =
   sys.env.get("SINKS_FILE").filter(_.nonEmpty) match {
     case Some(f) =>
@@ -176,11 +193,14 @@ val sinkCalls: List[(io.shiftleft.codepropertygraph.generated.nodes.Call, Map[St
         }
       }.toList
       val found = entries.flatMap { case (file, line, meta) =>
+        val window = 3
         val cands = cpg.call.filter(c => c.file.name.headOption.exists(_.endsWith(file)))
-          .filter(c => math.abs(c.lineNumber.getOrElse(-1) - line) <= 1).l
-        val named = cands.filter(c => c.name.matches(nameRe))
-        // prefer the call that matches the sink name table; otherwise the outermost call on that line
-        val pick = if (named.nonEmpty) named else cands.sortBy(c => -c.code.length).take(1)
+          .filter(c => math.abs(c.lineNumber.getOrElse(-1) - line) <= window).l
+        def dist(c: io.shiftleft.codepropertygraph.generated.nodes.Call): Int = math.abs(c.lineNumber.getOrElse(-1) - line)
+        val named = cands.map(c => c -> sinkNameKind(c)).filter(_._2 < 3)
+          .sortBy { case (c, k) => (dist(c), k, c.lineNumber.getOrElse(-1)) }.map(_._1)
+        val pick = if (named.nonEmpty) named.take(1)
+                   else cands.sortBy(c => (dist(c), -c.code.length)).take(1)
         pick.map(_ -> meta)
       }.distinct
       System.err.println(s"// SINKS_FILE=$f: ${entries.size} semgrep findings -> ${found.size} CPG call nodes matched")

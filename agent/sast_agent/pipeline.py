@@ -1,11 +1,11 @@
-"""Deterministic screening pipeline for the SAST agent (M1).
+"""Deterministic screening pipeline for the SAST agent.
 
 Thin wrappers over the same stages as agent/run_baseline.py
 (semgrep -> semgrep_to_sinks.py -> joern-parse -> backward_from_sinks.sc ->
 taint_confirm.sc -> extract_chain_snippets.sc), with every stage's output
 cached under workspace/agent-cache/<target>/ so repeat agent-tool calls are
-cheap. All functions are synchronous; the investigator (M2) may run them in
-a thread. Only facts are returned — no verdicts.
+cheap. All functions are synchronous; callers (tracer, agents) may run them
+in a thread. Only facts are returned — no verdicts.
 
 Usage:
     from sast_agent import pipeline
@@ -176,6 +176,26 @@ def get_chains(target: str, force: bool = False) -> dict[str, list[Chain]]:
         chains[_sink_key(s["file"], s["line"], s["rule"])] = [
             Chain(**c) for c in rec["chains"]]
     return chains
+
+
+def get_dead_ends(target: str) -> dict[str, dict]:
+    """M9.1 dead-end records from chains.jsonl: {sink_id: dead_end dict}
+    for sinks whose backward walk reached no entrypoint. The tracer seeds
+    its first envelope with this instead of re-deriving the stall point."""
+    out = config.cache_dir(target) / "chains.jsonl"
+    dead: dict[str, dict] = {}
+    if not out.exists():
+        return dead
+    for line in out.read_text().splitlines():
+        line = line.strip()
+        if not line.startswith("{"):
+            continue
+        rec = json.loads(line)
+        de = rec.get("dead_end")
+        if de:
+            s = rec["sink"]
+            dead[_sink_key(s["file"], s["line"], s["rule"])] = de
+    return dead
 
 
 def _flow_to_str(flow: dict) -> str:

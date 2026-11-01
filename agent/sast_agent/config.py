@@ -67,6 +67,11 @@ WORKER_TOTAL_LLM_TOKENS = 3_000_000
 # peak in-flight LLM calls is ~3x this).
 WORKER_CONCURRENCY = 3
 
+# Tracer (A-class v2): structured trace-continuation state machine.
+# Per-sink LLM cost ≈ steps + 1 verdict call, so the step budget is the
+# real cap; the wall-clock budget reuses SINK_TIMEOUT_SECONDS semantics.
+MAX_TRACE_STEPS_PER_SINK = 12
+
 REPO = Path(__file__).resolve().parent.parent.parent
 CACHE_ROOT = REPO / "workspace" / "agent-cache"
 
@@ -88,16 +93,13 @@ def find_joern_parse() -> str:
 JOERN_PARSE = find_joern_parse()
 
 # Same shape as agent/run_baseline.py TARGETS.
+# (python-flask-enterprise was user-deleted in D17/9947ba2 — do not
+# re-register without restoring the tree.)
 TARGETS = {
     "python-flask": {
         "rules": "analysis/rules/sinks-python.yml",
         "tree": "targets/python-flask",
         "ground_truth": "targets/python-flask/ground_truth.json",
-    },
-    "python-flask-enterprise": {
-        "rules": "analysis/rules/sinks-python.yml",
-        "tree": "targets/python-flask-enterprise",
-        "ground_truth": "targets/python-flask-enterprise/ground_truth.json",
     },
     "java-spring": {
         "rules": "analysis/rules/sinks-java.yml",
@@ -109,18 +111,27 @@ TARGETS = {
         "tree": "targets/js-ts-express",
         "ground_truth": "targets/js-ts-express/ground_truth.json",
     },
-    "csharp-aspnet": {
-        "rules": "analysis/rules/sinks-csharp.yml",
-        "tree": "targets/csharp-aspnet",
-        "ground_truth": "targets/csharp-aspnet/ground_truth.json",
+}
+
+
+# Canaries (workspace/, NOT benchmark targets — never in --target all):
+# hand-built scenes that exercise one mechanism end to end. M9 acceptance:
+# canary-di is a registry-dispatch + module-variable staging relay, blind
+# to both the call graph and the dataflow engine.
+CANARIES = {
+    "canary-di": {
+        "rules": "analysis/rules/sinks-python.yml",
+        "tree": "workspace/canary-di",
+        "ground_truth": "workspace/canary-di/ground_truth.json",
     },
 }
 
 
 def target_cfg(target: str) -> dict:
     """Resolve a target name to its config (with absolute tree path)."""
-    if target not in TARGETS:
-        raise ValueError(f"unknown target: {target} (known: {list(TARGETS)})")
-    cfg = dict(TARGETS[target])
+    if target not in TARGETS and target not in CANARIES:
+        raise ValueError(f"unknown target: {target} (known: {list(TARGETS)}, "
+                         f"canaries: {list(CANARIES)})")
+    cfg = dict(TARGETS.get(target) or CANARIES[target])
     cfg["tree_path"] = REPO / cfg["tree"]
     return cfg
