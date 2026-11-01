@@ -4,6 +4,12 @@ Status of the Semgrep + Joern taint-confirmation pipeline as of 2026-07.
 Companion docs: `LIMITATIONS.md` (known gaps), `DECISIONS.md` (what we
 decided to do about them).
 
+> **Reading note (2026-11-01).** Sections below the three 2026-11-01
+> entries are the M0–M8 era execution log, kept as history. They reference
+> files retired on 2026-11-01 (D19): `docs/AGENT_MVP_PLAN.md`,
+> `agent/HANDOFF.md`, `agent/run_agent.py`, the investigator path — all
+> recoverable from git history.
+
 ## Investigator path retired (2026-11-01) — gate PASS, D19
 
 The tracer passed the frozen baseline gate end to end

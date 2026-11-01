@@ -158,7 +158,7 @@ to benchmark an LLM + Semgrep + Joern SAST pipeline.
     0 new safe FPs); the old free-form investigator path was deleted the
     same day.
 - `agent/sast_agent/scrub.py` — the **single** ground-truth scrubber
-  (red line §9.2, DECISIONS.md D16). `strip_gt_tags()` removes every known
+  (red line, DECISIONS.md D16). `strip_gt_tags()` removes every known
   marker shape; `scrub()` strips then ASSERTS nothing label-shaped survived
   — certain hit → appended to `workspace/leak-audit.jsonl` and
   `GroundTruthLeak` raised (the run fails); suspected (a bare

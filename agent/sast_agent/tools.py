@@ -25,14 +25,14 @@ from .scrub import scrub, scrub_dicts
 
 REPO = config.REPO
 
-# Red line §9.2: never readable through any tool.
+# Red line: never readable through any tool.
 GROUND_TRUTH_NAMES = {"ground_truth.json", "GROUND_TRUTH.md"}
 
 REPO_MAP_MAX_CHARS = 4000
 SEARCH_MAX_LINES = 100
 JOERN_QUERY_MAX_ROWS = 50
 
-# §6A: parameterized joern_query templates only — no free Scala in M1.
+# parameterized joern_query templates only — no free Scala in M1.
 JOERN_QUERY_TEMPLATES = ("callers_of", "writes_to", "reads_of", "methods_in_file")
 
 _JOERN_QUERY_FALLBACK = (
@@ -243,7 +243,7 @@ class SastTools:
                      target=self.target)
 
     def joern_query(self, template: str, arg: str) -> list | str:
-        """Parameterized CPG query (§6A): one of JOERN_QUERY_TEMPLATES.
+        """Parameterized CPG query (one of JOERN_QUERY_TEMPLATES.
         Returns parsed JSON rows (max 50). After MAX_JOERN_QUERY_RETRIES
         consecutive failures, stops running and returns a fallback hint."""
         if self._joern_failures >= config.MAX_JOERN_QUERY_RETRIES:
@@ -285,7 +285,7 @@ class SastTools:
             out.write_text(stdout)
         return _parse_json_lines(out.read_text(), 500)
 
-    # ---- category-B planner tools (§7A, M6) ----
+    # ---- category-B planner tools (M6) ----
 
     def get_forward_slice(self, entrypoint: str) -> dict | str:
         """Handler + forward-reachable callee source for one entrypoint
@@ -323,11 +323,11 @@ class SastTools:
 
     def submit_hypotheses(self, hypotheses: list[dict],
                           coverage: list[dict] | None = None) -> dict:
-        """Validate and enqueue category-B hypotheses (§7A). Each entry must
+        """Validate and enqueue category-B hypotheses . Each entry must
         satisfy the Hypothesis contract; invalid entries are reported, not
         fatal. Appends to cache_dir/hypotheses.jsonl.
 
-        `coverage` is the taxonomy coverage checklist (§7A 完整性约束, M8):
+        `coverage` is the taxonomy coverage checklist (完整性约束, M8):
         one TaxonomyEntry per class. Validated separately — a bad checklist
         never blocks the hypothesis queue (recall first); on failure a
         mechanical fallback is derived from the accepted hypotheses and

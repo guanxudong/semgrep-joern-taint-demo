@@ -268,7 +268,7 @@ def get_entrypoint_snippets(target: str, force: bool = False) -> list[dict]:
     """extract_entrypoint_snippets.sc -> per-entrypoint slice records (cached).
     Records: {"entrypoint": {route, method, file, line}, "callees": [...],
     "snippets": [{function, file, start_line, end_line, code}, ...]} — the
-    handler plus its forward-reachable callees, for category-B review (§7A)."""
+    handler plus its forward-reachable callees, for category-B review ."""
     cfg = _prepare_tree(target)
     cpg = ensure_cpg(target, force=force)
     out = config.cache_dir(target) / "entrypoint_snippets.jsonl"
@@ -289,7 +289,7 @@ def get_entrypoint_snippets(target: str, force: bool = False) -> list[dict]:
 
 def screen(target: str, force: bool = False) -> list[InvestigationBrief]:
     """Orchestrate the deterministic screening and classify each sink's gap
-    (§6A 信号层): no chains -> GAP_NO_CHAIN; chains but taint not confirmed
+    (gap classification): no chains -> GAP_NO_CHAIN; chains but taint not confirmed
     -> GAP_FLOW_DEAD; otherwise OK."""
     sinks = run_semgrep(target, force=force)
     chains = get_chains(target, force=force)

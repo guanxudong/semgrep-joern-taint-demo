@@ -13,8 +13,8 @@ refs, verdict) but not the tracing agent's message history:
 
 Both roles may use read_function / search_code (ground-truth files
 refused by the tool layer; VULN:/SAFE: tag comments stripped here) but
-NOT joern_query (§7). This module only produces the two reports — the
-mechanical merge into verdict + confidence_level (plan §4) lives in
+NOT joern_query. This module only produces the two reports — the
+mechanical merge into verdict + confidence_level  lives in
 report.apply_verifier, so a verifier failure (timeout/quota) never
 changes a verdict by itself.
 
@@ -148,8 +148,8 @@ def _model() -> OpenAIChatModel:
 
 
 def _add_read_tools(agent: Agent) -> None:
-    """read/search only — no joern_query (§7); ground-truth labels are
-    scrubbed and leak-asserted inside SastTools (red line §9.2, scrub.py)."""
+    """read/search only — no joern_query ; ground-truth labels are
+    scrubbed and leak-asserted inside SastTools (red line, scrub.py)."""
 
     @agent.tool
     def read_function(ctx: RunContext[SastTools], file: str,
@@ -264,7 +264,7 @@ async def verify_finding(finding: Finding, tools: SastTools,
 
 
 # ---------------------------------------------------------------------------
-# Category-B rounds (§7A, M7): same two-round machinery, but the flaw is an
+# Category-B rounds (M7): same two-round machinery, but the flaw is an
 # ABSENT check — the attacker constructs a concrete over-reach request, the
 # defender hunts middleware/framework-level guards mounted outside the
 # handler (the worker's forward slice cannot see them).

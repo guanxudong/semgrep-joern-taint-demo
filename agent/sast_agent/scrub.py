@@ -25,8 +25,8 @@ regex covers every known form, so a survivor means the input shape is new
 legitimately name a fixture after one, so it is audited, not fatal.
 
 The id pattern is a hardcoded shape, NOT read from ground_truth.json —
-the agent tool layer must never touch the ground-truth files (red line
-§9.2), so this module stays dependency-free and ground-truth-blind.
+the agent tool layer must never touch the ground-truth files (red line),
+so this module stays dependency-free and ground-truth-blind.
 """
 
 from __future__ import annotations

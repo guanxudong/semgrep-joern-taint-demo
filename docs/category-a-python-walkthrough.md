@@ -1,7 +1,7 @@
 # Category A 漏洞检测走查：Semgrep → Joern → LLM（python-flask 实战）
 
 这份教程带你**亲手**把 category A（sink 类）漏洞的完整检测 pipeline 跑一遍。
-目标项目是一个有 19 个漏洞 + 5 个安全对照样本的 Flask 靶子：`targets/python-flask`。
+目标项目是一个有 17 个漏洞 + 5 个安全对照样本的 Flask 靶子：`targets/python-flask`。
 文中所有命令和输出都在本机实际执行验证过（2026-09-29），你可以逐条对照复现。
 
 > 阅读姿势：每个 Stage 先讲"这一步回答什么问题"，再给命令和真实输出，

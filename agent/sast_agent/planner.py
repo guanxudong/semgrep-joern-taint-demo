@@ -8,7 +8,7 @@ submit_hypotheses tool and land in workspace/agent-cache/<target>/
 hypotheses.jsonl — the M7 workers will consume that queue.
 
 Recall is the planner's job; precision is the M7 worker's. Ground truth is
-never visible to the agent (red line §9.2) — run_planner.py checks coverage
+never visible to the agent (red line) — run_planner.py checks coverage
 against it only after the run.
 
 Usage:

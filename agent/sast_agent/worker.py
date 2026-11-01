@@ -4,8 +4,7 @@ Builds one pydantic-ai agent per hypothesis (tool-call counting/logging +
 asyncio.wait_for timeout + UsageLimits + ToolCallPart submission extraction
 + honest synthesized fallback); the evidence shape is different from
 category A: a B-class finding proves an ABSENT check, not a
-dangerous call. The playbook is the absence-comparison method (§7A
-lines 333-346):
+dangerous call. The playbook is the absence-comparison method (lines 333-346):
 
 1. get_forward_slice(entrypoint) — handler + all downstream callees;
 2. look for the check that SHOULD exist for the hypothesis's class;
@@ -16,9 +15,9 @@ lines 333-346):
 
 Tools mounted: get_forward_slice + GT-stripped read_function /
 search_code wrappers + submit_b_finding. No joern_query: B-class is an
-absence proof, CPG queries add little (§7A playbook doesn't use joern).
+absence proof, CPG queries add little (playbook doesn't use joern).
 
-Confidence mapping (plan §4, mechanical — never LLM-filled) starts in
+Confidence mapping (mechanical — never LLM-filled) starts in
 report.assign_confidence_level_b and is refined by the verifier merge
 (report.apply_verifier_b).
 
@@ -57,7 +56,7 @@ class BFindingSubmission(BaseModel):
     comparison: str | None = None
 
 
-# Per-class "should-be check" hints (§7A 假设表) — written into the prompt.
+# Per-class "should-be check" hints (假设表) — written into the prompt.
 _SHOULD_BE_CHECKS = """\
 The check that SHOULD exist, per class:
 - idor: an ownership/tenancy check on the fetched object
@@ -203,7 +202,7 @@ def build_agent(hyp: Hypothesis, guard: _ToolGuard) -> Agent:
     def submit_b_finding(ctx: RunContext[SastTools], finding: BFindingSubmission) -> dict:
         """Submit the final verdict for this hypothesis. Call exactly once, last."""
         # confidence_level/stats are placeholders here; the worker
-        # recomputes both from the run record (plan §4 mechanical mapping).
+        # recomputes both from the run record (mechanical mapping).
         full = finding.model_dump()
         full["confidence_level"] = "LIKELY"
         full["stats"] = {"source": "agent_submit"}

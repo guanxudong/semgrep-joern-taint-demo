@@ -32,7 +32,7 @@ class TaintFlow(BaseModel):
 class Evidence(BaseModel):
     kind: str               # "chain" | "taint_flow" | "code_read"
                             # | "joern_query" | "exploit_sketch"
-                            # | "absence_comparison" (category B, §7A)
+                            # | "absence_comparison" (category B, )
     summary: str
     refs: list[str]         # "file:start-end" 可核查位置
 
@@ -55,7 +55,7 @@ class Finding(BaseModel):
 
 
 class Gap(str, Enum):
-    """Deterministic-screening gap classification (§6A 信号层)."""
+    """Deterministic-screening gap classification (gap classification)."""
 
     OK = "OK"                          # 直接语义判定，不触发下钻
     GAP_NO_CHAIN = "GAP_NO_CHAIN"      # backward 回溯未达入口点
@@ -63,13 +63,13 @@ class Gap(str, Enum):
     GAP_MISSING_STORE = "GAP_MISSING_STORE"  # 字段写入点不在链上
 
 
-# Category-B taxonomy (§7A): the 7 non-sink classes the planner hypothesizes.
+# Category-B taxonomy : the 7 non-sink classes the planner hypothesizes.
 B_VULN_TYPES = ("idor", "business-logic", "race-condition", "priv-esc",
                 "mass-assignment", "broken-access-control", "auth-flaws")
 
 
 class Hypothesis(BaseModel):
-    """One planner-generated category-B suspicion (§7A 队列来源).
+    """One planner-generated category-B suspicion (队列来源).
 
     Evidence shape is "a check that should be there is absent", so the queue
     entry is a route + expected class + why the route looks suspicious."""
@@ -90,15 +90,14 @@ class Hypothesis(BaseModel):
 
 
 class ExcludedRoute(BaseModel):
-    """One route the planner considered for a class but did not submit (§7A
-    完整性约束): the exclusion reason is the audit trail."""
+    """One route the planner considered for a class but did not submit (完整性约束): the exclusion reason is the audit trail."""
 
     route: str              # "GET /users/<id>" (digest route label)
     reason: str             # 为何排除: guard seen / trait absent / ...
 
 
 class TaxonomyEntry(BaseModel):
-    """Per-class accounting for the taxonomy coverage checklist (§7A 完整性
+    """Per-class accounting for the taxonomy coverage checklist (完整性
     约束, M8): in a no-ground-truth environment this is the only visible
     guarantee of category-B recall."""
 
@@ -117,7 +116,7 @@ class TaxonomyEntry(BaseModel):
 
 
 class BFinding(BaseModel):
-    """One worker verdict over a category-B hypothesis (§7A, M7).
+    """One worker verdict over a category-B hypothesis (M7).
 
     The A-class Finding anchors on a sink; the B-class evidence shape is an
     ABSENT check, so the anchor is the planner's Hypothesis (echoed back

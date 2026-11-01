@@ -6,7 +6,7 @@ ground_truth.json with the same matching logic as
 scripts/llm_judge_sink_chains.py (file+function matching, route-suffix
 matching, _jsp.java -> .jsp normalization — copied below with attribution).
 
-Also owns the confidence_level mapping (plan §4): provisional for M2,
+Also owns the confidence_level mapping : provisional for M2,
 refined by the M4 verifier.
 
 CLI:
@@ -22,7 +22,7 @@ from .contracts import Gap, InvestigationBrief, Verdict
 
 
 def assign_confidence_level(brief: InvestigationBrief, verdict: Verdict) -> str:
-    """Provisional M2 mapping (plan §4).
+    """Provisional M2 mapping .
 
     M4 refines it afterwards: apply_verifier() merges the attacker/defender
     rounds into the level (attacker failure downgrades, an effective
@@ -36,7 +36,7 @@ def assign_confidence_level(brief: InvestigationBrief, verdict: Verdict) -> str:
 
 
 def assign_confidence_level_b(verdict: Verdict, evidence: list) -> str:
-    """Initial M7 mapping for category-B findings (plan §4). The verifier
+    """Initial M7 mapping for category-B findings . The verifier
     rounds refine it afterwards (apply_verifier_b: attacker failure
     downgrades, defender guard vetoes).
 
@@ -399,7 +399,7 @@ def score_b_findings(findings: list[dict], ground_truth: list[dict]) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Validation layer (§6A 校验层 + red line §9.4) — mechanical, no LLM
+# Validation layer (red line) — mechanical, no LLM
 # ---------------------------------------------------------------------------
 
 import os
@@ -443,20 +443,20 @@ def validate_finding(f: dict, tree: Path) -> list[str]:
     """Mechanically check a finding's evidence against the target tree.
     Returns a list of violation strings (empty = clean).
 
-    Checks (§6A 校验层):
+    Checks (validation checks):
     - every evidence ref "file:start-end" resolves under the tree
       (ground-truth files excluded), the slice exists and is non-blank;
     - if the evidence summary cites code identifiers, at least one must
       appear in the union of the entry's referenced slices;
     - for drilled (multi-file) paths, every evidence file must be backed
       by a tool_log entry (read/search/query/snippets) that touched it;
-    - red line §9.4: CONFIRMED requires an exploit_sketch and refs.
+    - red line: CONFIRMED requires an exploit_sketch and refs.
     """
     violations: list[str] = []
     tree = tree.resolve()
     evidence = f.get("evidence", [])
     ref_files: set[str] = set()
-    n_file_refs = 0  # only file:line refs count toward the §9.4 requirement
+    n_file_refs = 0  # only file:line refs count toward the red-line requirement
 
     for e in evidence:
         summary = e.get("summary", "")
@@ -553,7 +553,7 @@ def validate_finding(f: dict, tree: Path) -> list[str]:
                 f"llm_inferred hop {label!r}: justify_ref {ref!r} does not "
                 "resolve to lines containing the hop identifier")
 
-    # red line §9.4: CONFIRMED needs an exploit sketch and checkable refs
+    # red line: CONFIRMED needs an exploit sketch and checkable refs
     if f.get("confidence_level") == "CONFIRMED":
         if not f.get("exploit_sketch"):
             violations.append("CONFIRMED without an exploit_sketch")
@@ -566,9 +566,9 @@ def validate_finding(f: dict, tree: Path) -> list[str]:
 def apply_validation(findings: list[dict], tree: Path,
                      b_class: bool = False) -> list[dict]:
     """Downgrade CONFIRMED findings with validation violations to LIKELY and
-    attach the violation list (§6A 校验层: 造假或断档 -> 自动降级).
+    attach the violation list (validation: 造假或断档 -> 自动降级).
 
-    b_class=True adds the M7 category-B rule (plan §4): a CONFIRMED B
+    b_class=True adds the M7 category-B rule : a CONFIRMED B
     finding must carry absence_comparison evidence (the missing spot + the
     comparison route's check location), else it drops to LIKELY."""
     for f in findings:
@@ -589,7 +589,7 @@ def apply_validation(findings: list[dict], tree: Path,
 
 
 # ---------------------------------------------------------------------------
-# M4 adversarial-review merge (plan §7 -> §4 mapping) — mechanical, no LLM
+# M4 adversarial-review merge — mechanical, no LLM
 # ---------------------------------------------------------------------------
 
 def _refs_resolve(refs: list[str], tree: Path) -> bool:
@@ -617,7 +617,7 @@ def _refs_resolve(refs: list[str], tree: Path) -> bool:
 def apply_verifier(finding: dict, verifier: dict,
                    tree: Path | None = None) -> dict:
     """Merge the M4 attacker/defender rounds into verdict + confidence_level
-    (plan §7, mapping per §4). Mechanical — the LLM rounds only supply the
+    (mechanical mapping). Mechanical — the LLM rounds only supply the
     attacker/defender reports; every consequence is decided here:
 
     - not-vulnerable findings: verifier skipped (it only runs on vulnerable
@@ -629,7 +629,7 @@ def apply_verifier(finding: dict, verifier: dict,
     - attacker failure: exploit_possible=false -> downgrade one level
       (CONFIRMED -> LIKELY -> SUSPICIOUS);
     - side effect: empty exploit_sketch / sanitizer_notes are filled from
-      the verifier reports (§9.4 wants an exploit sketch on CONFIRMED);
+      the verifier reports (red line wants an exploit sketch on CONFIRMED);
     - a failed round (None report: timeout/quota) has no effect.
     """
     v = finding["verdict"]
@@ -772,7 +772,7 @@ def render_markdown_b(findings: list[dict], score: dict | None = None,
     """Category-B report (M7): hypothesis-shaped sections — no sink —
     with the absence-comparison evidence block and the Verifier line.
     `checklist` (M8) is the planner's taxonomy coverage checklist, rendered
-    as a trailing audit section (§7A 完整性约束)."""
+    as a trailing audit section (完整性约束)."""
     lines = ["# SAST Agent Report — Category B (M7)", ""]
     if score:
         lines += [
@@ -849,7 +849,7 @@ def render_markdown_b(findings: list[dict], score: dict | None = None,
 
 
 def _render_checklist_section(checklist: dict | None) -> list[str]:
-    """M8 taxonomy coverage audit section (§7A 完整性约束): per class, how
+    """M8 taxonomy coverage audit section (完整性约束): per class, how
     many routes the planner examined, submitted, and excluded (with the
     exclusion reasons — the recall guarantee when no ground truth exists)."""
     lines = ["## Taxonomy coverage audit", ""]
@@ -905,7 +905,7 @@ def main() -> int:
     ap.add_argument("--findings", required=True, help="findings JSONL")
     ap.add_argument("--ground-truth", required=True, help="target's ground_truth.json")
     ap.add_argument("--tree", default="",
-                    help="target source tree (enables the §6A validation layer)")
+                    help="target source tree (enables the validation layer)")
     ap.add_argument("-o", "--output", default="-", help="report.md (default: stdout)")
     args = ap.parse_args()
 

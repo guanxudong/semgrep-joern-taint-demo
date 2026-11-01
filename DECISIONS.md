@@ -1,15 +1,10 @@
 # Decisions
 
-Optimization decisions for the taint-confirmation pipeline, derived from
-`analysis/LIMITATIONS.md` (2026-07). Ordered by cost/benefit; each entry
-states the decision and the rationale. See `PROGRESS.md` for execution order.
-
-> **2026-09-05: D8/D9 superseded.** The jsp-legacy target and
-> `scripts/jsp_to_java.py` were removed from the repo by user decision
-> (recoverable from git history). D8/D9 below are kept as historical
-> record; their engine-side traces (the `out.print` rule branch,
-> `_jspService` entrypoint detection, `_jsp.java→.jsp` scorer
-> normalization) remain dormant and harmless for the 4 remaining targets.
+Decision record for the Semgrep + Joern + LLM pipeline. Each live entry
+states the decision and the rationale; execution order and outcomes live in
+`PROGRESS.md`. Entries implemented and closed long ago are compressed to
+one-liners in the archive index at the bottom — full texts are recoverable
+from git history (pre-2026-11-01 revisions of this file).
 
 ## Target coverage (2026-11-01)
 
@@ -54,134 +49,33 @@ with it — all recoverable from git history. The B-class planner/worker
 playbooks are unchanged; the attacker/defender verifier is shared by both
 classes and stays.
 
-## Target coverage (2026-07)
+## Answer-leak hardening (2026-09-26)
 
-### D8. JSP support via transpile-to-Java
+### D15. No in-source markers anywhere; Perl target born marker-free
 
-Gap: legacy JSP applications are outside the pipeline — neither Semgrep nor
-Joern has a JSP frontend (confirmed on joern 4.0.566: no JSP frontend
-exists), so a scriptlet-style JSP target could not be benchmarked at all.
-
-Decision: transpile, don't extend. `scripts/jsp_to_java.py` (stdlib only,
-deterministic) converts `targets/jsp-legacy/pages/*.jsp` into plain-Java
-servlet-style classes (Jasper-style `_jspService` methods) under the
-gitignored `workspace/jsp-java/`, and the ENTIRE java pipeline
-(`analysis/rules/sinks-java.yml`, javasrc2cpg via joern-parse, the joern
-.sc scripts) runs on the generated tree unchanged. Chosen over Semgrep
-generic-mode pattern matching (no dataflow, no call graph — would only
-exercise half the pipeline) and over waiting for a Joern JSP frontend
-(not on any roadmap we can see). Rationale: full reuse of the java rules
-and joern scripts with zero pipeline changes; the transpilation is
-line-preserving and records a per-file offset in
-`workspace/jsp-java/manifest.json`, so findings map back to exact JSP
-lines. Known cost: the return-based java xss sink rule did not match
-`out.print(...)` — resolved by D9.
-
-### D9. JSP pipeline wiring (out.print sink, _jspService entrypoints)
-
-Gap: D8's generated tree parses and scans, but three pipeline pieces were
-still Spring-shaped: the xss rule only matched `return <html> + x`, the
-joern scripts only recognized `@*Mapping` entrypoints, and the LLM judges
-matched ground truth on CPG file names (`pages/X_jsp.java` vs `X.jsp`).
-
-Decision: minimal unions, no forks. (1) `java-sink-xss` gained an
-`out.print(<... $HTML + $X ...>)` alternative under the SAME HTML
-metavariable guard, and `print` joined the java sink-name tables (the CPG
-call name of `out.print` is `print`); java-spring semgrep output is
-byte-identical before/after. (2) All five joern scripts union JSP
-entrypoints `cpg.method.nameExact("_jspService")` in `pages/*_jsp.java`
-into the java case — a pure union, inert for the other targets (no
-`*_jsp.java` files there) — with the route label derived by filename
-convention (`pages/X_jsp.java` → `"/X.jsp"`, quoted so the judge's
-route-suffix matching keeps working). Chosen over reading
-`workspace/jsp-java/manifest.json` in the scripts: the convention is
-equivalent and adds no env vars. (3) Both LLM judges normalize
-`X_jsp.java` → `X.jsp` when comparing files, and the sink judge treats
-`_jspService` as non-discriminating (every page shares it) by requiring
-the route label to match too — otherwise any judged sqli chain would
-match the safe sqli sample. `taint_confirm.sc` needed no change:
-`request.getParameter` was already a java source and flow attribution is
-file/line-range based. Result: A 10/10, B 7/7, 0 safe FPs (PROGRESS.md).
-
-## Benchmark realism (2026-09-15)
-
-### D11. Enterprise-grade pilot target, no in-source vuln markers
-
-Gap: the four small targets (~500 LOC, one vuln per handler, `VULN:`/`SAFE:`
-comments above every entry) invite overfitting — vuln density is ~100% of
-handlers, chains are 1-2 hops, and the markers leak into the agent's
-read/search tool output (mitigated only by GT-tag stripping, which itself
-has had bugs).
-
-Decision: build `targets/python-flask-enterprise/` (pilot language chosen
-by the user) as a layered enterprise-style app with deep chains (up to 5
-hops), decorator-gated endpoints, inconsistent sanitizer usage, and 11
-near-miss SAFE mimics; and **drop the `VULN:`/`SAFE:` comment convention
-for this target** — ground truth lives only in `ground_truth.json` +
-`GROUND_TRUTH.md`. ~~The small targets keep their markers~~ (superseded
-by D15 on 2026-09-26: markers retired everywhere).
-External open-source validation repos (WebGoat/JuiceShop-style) were
-considered and deferred to a later phase — pilot first, then measure.
-
-### D12. Entrypoint detection by directory, rule arity fixes
-
-Gap (found by the D11 pilot): joern python entrypoint detection matched
-only `routes/*.py`, so the enterprise target's `api/` layout produced zero
-entrypoints and every chain came out NO_CHAIN; and `sinks-python.yml`
-patterns `eval($X)` / `yaml.load($D)` missed the realistic multi-arg forms
-`eval(expr, globals, locals)` / `yaml.load(data, Loader=...)`.
-
-Decision: widen the detection regex to `(routes|api)/.*\.py$` in the six
-joern scripts (directory convention documented, cheap, zero change for the
-existing targets — verified identical entrypoint extraction on
-python-flask), and add `...` to the eval/exec/yaml.load patterns. Chosen
-over renaming the target's `api/` to `routes/` (the layout difference is
-part of the realism test) and over full decorator-based entrypoint
-detection (more robust but a bigger change; revisit if a future target
-puts routes elsewhere).
-
-## Answer-leak hardening + new-language targets (2026-09-26)
-
-### D15. No in-source markers anywhere; new PHP (tier-1) and Perl (tier-3) targets
-
-Gap: although the LLM judges and agent tool layer strip `VULN:`/`SAFE:`
-marker comments (`_GT_TAG` regex in `llm_judge_sink_chains.py`,
-`llm_judge_entrypoints.py`, `sast_agent/investigator.py`), the stripping
-is path-dependent and the four small targets also carried *descriptive*
-spoiler comments ("Sink: executes a SQL string...", "No validation of
-amount sign -> negative amount steals money", "attacker fires many
-concurrent requests here") that no stripping rule covered — any read of
-the raw source handed the LLM the answers.
+Gap: the targets used to carry `VULN:`/`SAFE:` marker comments above
+every entry plus *descriptive* spoiler comments ("Sink: executes a SQL
+string...", "No validation of amount sign -> negative amount steals
+money") that no stripping rule covered — any read of the raw source
+handed the LLM the answers.
 
 Decision (user): retire the in-source marker convention in ALL targets
-(supersedes the "small targets keep their markers" clause of D11) and
-scrub every spoiler comment — marker lines deleted, flaw-explaining
-comments deleted or reworded to neutral functional descriptions (~100
-marker lines + ~50 spoiler comments across 64 files; code, identifiers,
-and ground truth untouched). The `_GT_TAG` stripping machinery stays as
-harmless defense-in-depth. Suggestive identifiers (`query_unsafe` etc.)
-were kept because ground truth references them; renaming is only allowed
-together with a ground-truth update (recorded in AGENTS.md).
+and scrub every spoiler comment — marker lines deleted, flaw-explaining
+comments deleted or reworded to neutral functional descriptions (code,
+identifiers, and ground truth untouched). The `_GT_TAG` stripping
+machinery stays as harmless defense-in-depth (hardened into the single
+scrubber of D16). Suggestive identifiers (`query_unsafe` etc.) were kept
+because ground truth references them; renaming is only allowed together
+with a ground-truth update (recorded in AGENTS.md).
 
-Same decision round: two new targets for engine-coverage testing —
-`targets/php-laravel/` (Laravel-style, 22-entry mirror of the small
-targets, `php-` ids; Semgrep GA + Joern php2cpg, so tier-1 full-pipeline
-with a weaker frontend; corrects the assumption that Joern lacks PHP —
-php2cpg exists but needs a PHP runtime) and `targets/perl-cgi/` (legacy CGI.pm style, one `.pl` script per action
-under `cgi-bin/`, routes by filename convention, 22-entry mirror, `pl-`
-ids; no Semgrep grammar, no Joern frontend — the tier-3 no-engine
-degraded-mode case of D10). Both
-follow the no-marker rule from birth and use neutral identifiers (safe
-variants named `searchV2`/`search_prepared` etc., not `*_safe`). Pipeline
-registration (`config.py` TARGETS, `run_baseline.py`, `sinks-php.yml`,
-`.sc` PHP branches, `perl_sinks.py`, repo_map perl/php support, `engines`
-flags) is deliberately NOT done yet — that is the D10 §6 integration work.
-
-Amendment (same day, user decision): the initially-built Mojolicious-style
-`targets/perl-mojo/` was deleted and replaced by `targets/perl-cgi/` —
-the user needs a LEGACY CGI.pm-style project (flat `cgi-bin/*.pl` scripts,
-CGI.pm param parsing, `print` HTML output), the shape of the old Perl web
-apps this tier-3 target is meant to represent.
+Same decision round: `targets/perl-cgi/` was created as the tier-3
+no-engine degraded-mode case of D10 (legacy CGI.pm style, one `.pl`
+script per action under `cgi-bin/`, routes by filename convention,
+22-entry mirror of the small targets, `pl-` ids) — no Semgrep grammar, no
+Joern frontend. It follows the no-marker rule from birth and uses neutral
+identifiers (safe variants named `searchV2`/`search_prepared` etc., not
+`*_safe`). Pipeline registration is deliberately NOT done yet — that is
+the D10 integration work.
 
 ## Measurement integrity (2026-10-04)
 
@@ -189,94 +83,76 @@ apps this tier-3 target is meant to represent.
 
 Gap found while auditing the measurement layer (not the pipeline):
 1. **The scrubber had four divergent copies.** Two `^`-anchored regexes in
-   the judge scripts and two unanchored ones in the agent tool layer
-   (`investigator.py`, `tools.py`, re-exported to `worker.py`/`verifier.py`).
-   The divergence is exactly what let a labelled `rg` line through once
-   (M7 acceptance). D15 then removed every marker from every target, so the
+   the judge scripts and two unanchored ones in the agent tool layer. The
+   divergence is exactly what let a labelled `rg` line through once (M7
+   acceptance). D15 then removed every marker from every target, so the
    repo lost its natural fixture and any future regression in the scrub
-   would have been silent — LIMITATIONS §4 already classes leak paths as
-   "a class of issue, not a fixed bug".
-2. **The gate failed for the wrong reason.** `python-flask-enterprise` is
-   registered in both TARGETS tables (so `--target all` includes it) but was
-   frozen with `--skip-llm`, leaving `judge_a`/`judge_b` empty;
-   `compare_with_baseline()` read that as "recall unparseable" → FAIL. Every
-   full batch run was guaranteed to exit 1 for reasons unrelated to code
-   quality, and the exit-1 signal was diluted across the other targets.
+   would have been silent — LIMITATIONS §4 classes leak paths as "a class
+   of issue, not a fixed bug".
+2. **The gate failed for the wrong reason.** A target registered in
+   TARGETS but frozen with `--skip-llm` left `judge_a`/`judge_b` empty,
+   and `compare_with_baseline()` read that as "recall unparseable" → FAIL.
+   Every full batch run was guaranteed to exit 1 for reasons unrelated to
+   code quality.
 3. **A recall drop carried no cause.** Code edit, snippet change, rule/joern
-   change and model drift all surfaced as the same red row. Model drift has
+   change and model drift all surfaced as the same red row. Model drift had
    already forced two baseline re-pins (2026-08, 2026-09) with no way to
    distinguish it from a real regression.
-4. **Only two gated dimensions.** Cost and confirmed rate — the two numbers
-   M14.2 will move — had no guardrail.
+4. **Only two gated dimensions.** Cost and confirmed rate had no guardrail.
 
 Decisions:
 - **Single scrubber, `agent/sast_agent/scrub.py`** (dependency-free,
   ground-truth-blind by construction): `strip_gt_tags()` covers every known
-  label shape (`//`, `#`, `/*`, `<!--`, `*`, any position on the line) and
-  `find_gt_leak()` classifies survivors as `certain` (a `VULN:`/`SAFE:`
-  label survived → the strip failed) or `suspected` (a bare `<lang>-<type>-
-  <nn>` id literal). `scrub()` strips, then ASSERTS: certain → append to
-  `workspace/leak-audit.jsonl` and raise `GroundTruthLeak`. Silent stripping
-  is what made the M7 leak invisible; a failed scrub must be loud. The id
-  pattern is a hardcoded shape, never read from `ground_truth.json` — the
-  tool layer must not touch ground truth (red line §9.2). Suspected hits are
-  audited, not fatal, because a real repo may legitimately name a fixture
-  after a CVE-style id.
+  label shape and `find_gt_leak()` classifies survivors as `certain`
+  (a `VULN:`/`SAFE:` label survived → the strip failed) or `suspected`
+  (a bare `<lang>-<type>-<nn>` id literal). `scrub()` strips, then
+  ASSERTS: certain → append to `workspace/leak-audit.jsonl` and raise
+  `GroundTruthLeak`. The id pattern is a hardcoded shape, never read from
+  `ground_truth.json` — the tool layer must not touch ground truth (red
+  line). Suspected hits are audited, not fatal, because a real repo may
+  legitimately name a fixture after a CVE-style id.
 - **Assertion choke points, not per-call-site code**: `SastTools` scrubs
   `read_function` / `search_code` / `get_chain_snippets` /
-  `get_forward_slice` (covers investigator, worker and verifier), and both
-  judges scrub the assembled `build_prompt`. New callers cannot forget.
-- **`--check-leak` on both judges** builds every prompt and asserts, with no
-  API key, so the leak guard is testable offline. Verified against all five
-  targets' real snippet artifacts, including the pre-D15 marker-bearing ones:
-  243 prompts, 0 leaks.
-- **Gate verdicts are PASS / SKIP / FAIL.** SKIP = "not comparable" (no judge
-  baseline, dimension data missing) and never fails the gate;
-  `--require-baseline` promotes it to FAIL for strict runs. This is the fix
-  for the guaranteed-false-FAIL above.
+  `get_forward_slice`, and both judges scrub the assembled `build_prompt`.
+  New callers cannot forget.
+- **`--check-leak` on both judges** builds every prompt and asserts, with
+  no API key, so the leak guard is testable offline.
+- **Gate verdicts are PASS / SKIP / FAIL.** SKIP = "not comparable" and
+  never fails the gate; `--require-baseline` promotes it to FAIL for
+  strict runs.
 - **`baseline.json` is version 2**: `{version, provenance, targets}` with
-  provenance = model + base_url, semgrep version, joern fingerprint (the
-  distribution has no `--version`; the version is read off
-  `lib/io.joern.joern-cli-<v>.jar`), git rev/dirty, sha of both judge scripts,
-  sha of every `analysis/joern/*.sc` + `analysis/rules/*.yml` + the
-  deterministic scripts (the ENGINE fingerprint), and per target
-  `tree_sha` + record-level shas of chains / snippets / entrypoint snippets.
-  v1 flat files are read transparently and migrated on write; entries for
-  unregistered targets (the removed `jsp-legacy`) are pruned with a log line.
-  Artifact hashes are computed over JSON **records**, not raw bytes — joern
-  writes `[INFO]` lines to the same stdout, so raw hashes differ between
-  identical runs while records are identical.
+  provenance = model + base_url, semgrep version, joern fingerprint, git
+  rev/dirty, sha of both judge scripts, sha of every `analysis/joern/*.sc`
+  + `analysis/rules/*.yml` + the deterministic scripts (the ENGINE
+  fingerprint), and per target `tree_sha` + record-level shas of chains /
+  snippets / entrypoint snippets. v1 flat files are read transparently and
+  migrated on write; entries for unregistered targets are pruned with a
+  log line. Artifact hashes are computed over JSON **records**, not raw
+  bytes — joern writes `[INFO]` lines to the same stdout.
 - **Every FAIL names its cause**: MODEL_DRIFT / CODE_CHANGED /
   SNIPPET_CHANGED / ENGINE_CHANGED / JUDGE_CHANGED, else REAL_REGRESSION.
-  `REAL_REGRESSION` is reserved for recall/FP failures — a budget overrun or
-  a missing measurement is not a quality regression.
-- **Token budget compares against the previous batch of the same shape**, not
-  the frozen judge baseline: the judge makes one call per chain, the agent
-  runs a full investigation per sink, so their token counts are not
-  comparable. Confirmed rate, by contrast, is the same deterministic stage on
-  both sides and is compared against the frozen baseline.
+  `REAL_REGRESSION` is reserved for recall/FP failures — a budget overrun
+  or a missing measurement is not a quality regression.
+- **Token budget compares against the previous batch of the same shape**,
+  not the frozen judge baseline (one call per chain vs a full
+  investigation are not comparable). Confirmed rate is compared against
+  the frozen baseline.
 - **New dimensions are opt-in** (`--max-token-delta`, `--min-confirmed-rate`,
-  `--forbid-leak`): the M5/M8 gate keeps its meaning until someone asks for
-  the stricter run, and every unmeasurable dimension prints SKIP instead of
+  `--forbid-leak`); every unmeasurable dimension prints SKIP instead of
   failing.
-- **Cost is gated because M14.2 needs it**: the tri-state judge's acceptance
-  criterion is "same recall, materially fewer tokens"; without a token gate
-  nothing would catch a regression that bought recall with 3× the budget.
 
-Not decided here: re-pinning the baseline (needs an LLM budget — see
-PROGRESS.md). The frozen numbers were measured on pre-D15 snippets whose
-markers were stripped in-prompt, so they are not label-contaminated, but
-they are no longer reproducible from the current tree, and the enterprise
-target still has no judge baseline at all.
+Still open: re-pinning the judge baseline (needs an LLM budget — see
+PROGRESS.md). The frozen numbers date from 2026-08/09 and are not
+reproducible from the current tree (targets pruned per D18 live only in
+git history).
 
 ## Non-HTTP targets (2026-10-31)
 
 ### D17. Securities-industry non-HTTP targets: language/scenario pairs by industry reality, `entrypoint.route` as trigger descriptor
 
-Gap: all five existing targets are HTTP applications; the taxonomy had no
+Gap: all existing targets are HTTP applications; the taxonomy had no
 coverage of the non-HTTP services that securities/IB firms actually
-develop and expose (the user works at one). Scoping questions: which
-application forms, which languages, which scenarios.
+develop and expose (the user works at one).
 
 Decisions:
 - **Forms**: message-queue/file-drop workers and FIX-style TCP command
@@ -288,13 +164,13 @@ Decisions:
   these firms typically self-develop as exposed services (the securities
   variant — clearing/reconciliation pipelines — IS, and was kept).
 - **Language↔scenario pairing by industry reality, not one-per-language**:
-  FIX gateways in Java + C# (commercial FIX engines exist only as
-  .NET/C++/Java SDKs; banks Java-heavy, buy-side .NET-heavy);
-  clearing/reconciliation workers in Python + Perl (data-pipeline lingua
-  franca + legacy ops estate). **JS/TS deliberately has no non-HTTP
-  target** — Node's role in securities firms is the web/API tier (already
-  covered by js-ts-express); forcing it would be the equivalent of writing
-  a web app in C++.
+  FIX gateways in Java (+ C# per the original mirror plan — the C# mirror
+  was later removed for engine reasons, D18); clearing/reconciliation
+  workers in Python + Perl (data-pipeline lingua franca + legacy ops
+  estate). **JS/TS deliberately has no non-HTTP target** — Node's role in
+  securities firms is the web/API tier (already covered by
+  js-ts-express); forcing it would be the equivalent of writing a web app
+  in C++.
 - **Schema**: `ground_truth.json` keeps its existing shape; only
   `entrypoint.route`'s VALUE becomes a trigger descriptor — `MSG <subject>`
   / `CMD <command>` / `FILE <kind>`. No new fields, judge compatibility
@@ -305,244 +181,43 @@ Decisions:
   the convention).
 - **Mapper support**: `scripts/repo_map.py` extracts the registration
   calls into the routes table (`method` MSG/CMD/FILE, extra `kind` key —
-  HTTP routes are unaffected, verified 22/22 route+function hits on all
-  four engine-backed HTTP targets). `llm_judge_entrypoints.py` prompt
-  generalized from "HTTP endpoint" to "externally reachable entrypoint".
-- **Not done (deferred)**: registering the four targets in the agent
+  HTTP routes are unaffected).
+- **Not done (deferred)**: registering the non-HTTP targets in the agent
   batch/baseline (same "generate first, register later" path perl-cgi
-  took); `compare_repo_maps.py --check` and the M6 planner's route
-  coverage still assume HTTP-shaped routes (documented in
-  LIMITATIONS.md §4).
+  took); `compare_repo_maps.py --check` and the planner's route coverage
+  still assume HTTP-shaped routes (documented in LIMITATIONS.md §4).
 
-New targets: `java-fix-gateway`, `csharp-fix-gateway` (mirror pair),
-`python-clearing-worker`, `perl-clearing-worker` (mirror pair; perl keeps
-its no-engine tier-3 degraded-mode role). 17 vulnerable + 5 safe entries
-each, same taxonomy as the HTTP targets.
-
-## Roadmap (2026-09-23)
-
-### D14. Agent productization first; self-evolution deferred
-
-Gap: plan.md carried two orderings — the M9–M13 ROI sequence (benchmark-
-at-ceiling capability work, including the self-evolution class M10/M12)
-and the M14 productization candidates — with no single priority.
-
-Decision (user): make AI SAST agent productization the main line —
-Phase 1: M14.1 unified orchestrator + funnel report → M14.3 enterprise
-full validation → M14.2 tri-state batch judge + model tiering → M9
-drill-down mechanization (target list from M14.3's failure attribution)
-→ M11 knowledge base. Defer the self-evolution class to Phase 2: M10
-rule self-evolution, M12 improvement loop, M13.1 canary guardrail — all
-gated on M14.3's real failure signals. M13.2 model-drift monitoring is
-neither deferred nor scheduled; pull it forward with baseline re-pinning
-needs. Rationale: the benchmark is at ceiling on the four small targets;
-what the project lacks is a runnable, measurable, affordable agent on
-real-shaped code — and self-evolution without real failure signals would
-hill-climb into overfitting the small targets.
-
-## Documentation (2026-09-23)
-
-### D13. Documentation consolidation: one file per role
-
-Gap: the repo root carried six markdown files with overlapping scope, and
-the closed M0–M8 spec (`AGENT_MVP_PLAN.md`) sat beside living documents —
-its §10 future-work partially duplicated `plan.md`, and its header still
-claimed four targets.
-
-Decision: keep exactly one markdown per role — `README.md` (human entry),
-`AGENTS.md` (agent guidance/pointers), `plan.md` (roadmap), `PROGRESS.md`
-(status log), `DECISIONS.md` (decision log), `analysis/LIMITATIONS.md`
-(known gaps + live agent/LLM-layer backlog, §4), `agent/HANDOFF.md`
-(agent-subsystem operations). The closed spec moved to
-`docs/AGENT_MVP_PLAN.md` with a CLOSED banner; its §10 items not covered
-by plan.md M9–M13 (production no-GT operations, CPG platformization)
-moved into plan.md's unscheduled section (cross-scan memory stays
-rejected per `docs/why-not-agent-memory.md`). Problem inventory lives in
-LIMITATIONS.md, scheduling in plan.md — cross-referenced, not merged.
+Current non-HTTP targets: `java-fix-gateway`, `python-clearing-worker`,
+`perl-clearing-worker` (perl keeps its no-engine tier-3 degraded-mode
+role). 17 vulnerable + 5 safe entries each, same taxonomy as the HTTP
+targets.
 
 ## Language coverage (2026-09-14)
 
 ### D10. Languages without engine frontends (Perl): degraded agent-only mode
 
-Gap: the benchmark may need targets in languages lacking a Semgrep grammar,
-a Joern frontend, or both. Verified 2026-09-14: Semgrep needs a per-language
-grammar (PHP is GA with cross-function dataflow; Perl is absent even from
-the experimental list); Joern actually ships php2cpg (`--language PHP`,
-backed by PHP-Parser and a local PHP runtime) but has no Perl frontend;
-tree-sitter-language-pack bundles both php and perl grammars. So PHP is a
-tier-1 candidate (full pipeline feasible — not scheduled), while Perl is
-tier-3: neither engine can see it — A-class screening dies at
-`ensure_cpg` and the B-class worker at `get_forward_slice`.
+Gap: the benchmark may need targets in languages lacking a Semgrep
+grammar, a Joern frontend, or both. Verified 2026-09-14: Semgrep has no
+Perl grammar at all; Joern has no Perl frontend; tree-sitter-language-pack
+bundles a perl grammar. Perl is tier-3: neither engine can see it —
+A-class screening dies at `ensure_cpg` and the B-class worker at
+`get_forward_slice`.
 
 Decision: **design only, no code yet** — for tier-3 languages, a degraded
-agent-only mode: (1) a per-language heuristic sink scanner emitting the exact
-`sinks.json` contract (`semgrep_to_sinks.py:39-47`), swapped in via a
-per-target `engines` / `sink_detector` config key; (2) the tree-sitter repo
-map as the only structural index (register perl in `scripts/repo_map.py`);
-(3) A-class investigation seeded from sink records with
-`search_code`/`read_function` grep-relay (the `joern_query` manual-relay
-hint turned primary); (4) a no-joern `get_forward_slice` fallback (repo-map
-symbols + import graph + grep) for the B-class worker, whose planner is
-already Joern-free; (5) metrics tier-labelled and never compared against
-full-pipeline targets. Chosen over transpiling Perl to a supported language
-(semantic chasm — sigils, scalar/list context, magic variables; and the far
-simpler 1:1 JSP transpiler itself was removed 2026-09-05), over writing a
-Joern Perl frontend (cost far exceeds benchmark value), and over Semgrep
-`--lang generic` (line-based, no AST — no stronger than the regex scanner it
+agent-only mode: (1) a per-language heuristic sink scanner emitting the
+exact `sinks.json` contract (`semgrep_to_sinks.py` output shape), swapped
+in via a per-target `engines` / `sink_detector` config key; (2) the
+tree-sitter repo map as the only structural index (register perl in
+`scripts/repo_map.py`); (3) A-class investigation seeded from sink
+records with `search_code`/`read_function` grep-relay (today: the
+tracer's read_file/search_code directives, D19); (4) a no-joern
+`get_forward_slice` fallback (repo-map symbols + import graph + grep) for
+the B-class worker, whose planner is already Joern-free; (5) metrics
+tier-labelled and never compared against full-pipeline targets. Chosen
+over transpiling Perl to a supported language (semantic chasm), over
+writing a Joern Perl frontend (cost far exceeds benchmark value), and
+over Semgrep `--lang generic` (no stronger than the regex scanner it
 would replace). Full design: `docs/perl-degraded-mode-design.md`.
-
-## Do now (small change, direct recall gain) — all implemented 2026-07
-
-### D1. Add route-parameter taint sources (implemented, broadened)
-
-Gap: `GET /users/<int:user_id>` binds input to the handler argument, never
-touching `request.*`; flows from `get_user` / `delete_user` are missed.
-
-Decision: in `taint_confirm.sc`, treat parameters of handlers whose route
-contains `<...>` as sources — mirrors the existing Spring `@PathVariable`
-handling. Single-script change.
-
-Implemented broader than the original Flask-only scope, per-language in
-`taint_confirm.sc`'s `sources`:
-
-- python: handler params of routes with `<...>` (Flask) or `{...}` (FastAPI)
-  placeholders; `request.get_json`/`view_args` accessor calls. Django URLconf
-  path params remain invisible (not decorator-based) — still a gap.
-- java: Spring `@RequestParam/@RequestBody/@RequestHeader/@PathVariable` plus
-  `@ModelAttribute/@RequestPart` and JAX-RS `@PathParam/@QueryParam/@FormParam/
-  @HeaderParam/@BeanParam`; `getPathInfo`/`getCookies` accessor calls.
-- js: Express `req.*`, Koa `ctx.*`/`ctx.request.*`, Fastify/Hapi `request.*`.
-- csharp: `Request.*` accessors + all controller action params + params of any
-  `[HttpGet]`-annotated action (covers minimal APIs).
-
-### D2. Match sinks by name first, not nearest line (implemented)
-
-Gap: Semgrep line-hint off-by-one (`java-ssti-01`): the ±1-line tolerance
-picked `new Configuration(...)` instead of the tainted `new Template(...)`
-one line below.
-
-Decision: in `taint_confirm.sc`, within a ±N line window around the Semgrep
-hint, filter candidate calls by sink *name* first and pick the nearest
-matching one; fall back to nearest-line only when no name matches in the
-window.
-
-Implemented in both `taint_confirm.sc` and `backward_from_sinks.sc`
-(identical matching): ±3 window; name match ranked name < methodFullName
-(simple name, `:signature` suffix stripped) < `new X(...)` code, so
-constructor sinks (`<init>` calls) match by type name and an assignment
-operator whose code mentions `new X` never beats the real constructor call.
-The per-language sink name tables were aligned with `analysis/rules/`
-(added e.g. `Template`, `FileInputStream`, `parse`, `send_file`,
-`XMLParser`, `spawnSync`, `createReadStream`, `deserialize`) and synced
-across all three Joern scripts.
-
-### D3. Chain-level confirmation report (implemented)
-
-Gap: confirmation is reported per sink, but the LLM layer judges per
-entrypoint->sink chain.
-
-Decision: join `backward_from_sinks.sc` chains with `taint_confirm.sc` flows
-on (route, sink) and emit CONFIRMED/UNCONFIRMED per chain. Pure
-post-processing of existing outputs.
-
-Implemented: `backward_from_sinks.sc` gained a machine-readable JSONL side
-output (`CHAINS_JSON=<path>`), new `scripts/chain_report.py` joins it with
-the taint JSONL on (sink file+line) and attributes flows to chains by
-entrypoint fullName (JS: route label, or nested-lambda prefix of the
-entrypoint). Output: one JSON object per entrypoint->sink chain with
-CONFIRMED / UNCONFIRMED / NO_CHAIN.
-
-### D4. Dedup flows by (entrypoint x sink), cap per entry (implemented)
-
-Gap: signature-based dedup plus a global cap of 5 lets duplicate paths crowd
-out distinct routes (4 admin-DELETE dups filled the list at `db/index.js:13`).
-
-Decision: dedup keyed on (entrypoint, sink); keep at least 1 flow per
-entrypoint; cap at 3 flows per entry instead of 5 per sink. Post-processing
-only, no Joern change.
-
-Implemented in `taint_confirm.sc`'s emission stage (output post-processing,
-no dataflow-query change): signature dedup kept, global `take(5)` replaced
-by a cap of 3 flows per `source_method` (entrypoint).
-
-## Do later (medium effort)
-
-### D5. Jump-on-Field for JS module-level variables only
-
-Gap: `js-sqli-02` — module-level `let pendingName` written by `stageName`,
-read by `findStaged`; flow dies at the module-variable store/load across
-files.
-
-Decision: when a backward DFG walk hits a module-variable read, manually jump
-to all writes of the same variable and continue from each RHS. Scope it
-strictly to cross-file module variables — do NOT build a general-purpose
-traversal (mostly redundant with `reachableByFlows`).
-
-**RESOLVED (2026-07, chain side):** the NO_CHAIN root cause turned out to be
-in the CALL graph, not the DFG — jssrc2cpg resolves require-imported calls
-(`userService.findStaged(...)`) to GHOST methods in the caller's own file
-(`routes/users.js::program:findStaged`, external=true), leaving the real
-method in the required module with zero incoming CALL edges. Implemented an
-import-binding call-edge repair in `backward_from_sinks.sc` and
-`extract_chain_snippets.sc`: a call site `recv.name(...)` with an external
-callee counts as a caller of the real method `m` when `recv` is an import
-binding (IMPORT nodes) in the call's file whose module path resolves to
-`m`'s file. Scoped to `lang == "js"` as decided. Result: js A recall 9/10 →
-10/10. The module-variable DATAFLOW gap in `taint_confirm.sc` (DFG still
-dies at the module-var store/load) remains open.
-
-### D6. Attach write sites to chain snippets
-
-Gap: backward chains include `find_staged` / `query_unsafe` but not the
-sibling `stage_name` call that stores the taint; the LLM must infer the store.
-
-Decision: for each field/variable appearing in a chain, append the source of
-all its write call sites to the snippet. No full trace needed — store-site
-source only.
-
-**Status (2026-09-10): DROPPED — the agent covers it, and that's the better
-method here.** The M3 drill-down playbook (AGENT_MVP_PLAN.md §6A) closes the
-gap at runtime: `search_code(var)` finds the store sites, and the three
-store-side targets (js-sqli-02, cs-cmdi-02, cs-path-traversal-01) all reach
-vuln=True LIKELY 0.95 with the write sites cited as violation-free evidence
-refs — benchmark recall sits at the 10/10 ceiling with zero SAFE FPs. The
-mechanical version would save tokens but change no verdict, and per the
-project principle (AI SAST: when the LLM already covers a gap well,
-engine-side machinery must justify itself by effect, not elegance) it
-doesn't. Recorded here so it isn't re-proposed.
-
-### D7. Name-based call-site fallback for C# (LOW_CONFIDENCE)
-
-Gap: C# flows crossing into `Services/` stay UNCONFIRMED because
-csharpsrc2cpg drops the CALL edges; waiting for an upstream fix is not
-realistic.
-
-Decision: fall back to `cpg.call.name("<methodName>")` traversal when
-resolved `.caller` edges are missing. Accept same-name collisions, but mark
-anything confirmed this way LOW_CONFIDENCE rather than CONFIRMED. Do NOT
-tune Semgrep rules to force results — this is a frontend limitation.
-
-**RESOLVED (2026-07, chain side):** the gap was narrower than expected —
-csharpsrc2cpg drops the call NODE entirely when `_svc.Method(...)` is nested
-inside another call (`Ok(_svc.Method())`), so even name-based call
-traversal finds nothing. Implemented a source-text fallback in
-`backward_from_sinks.sc` / `extract_chain_snippets.sc`: a controller method
-counts as a caller of service method `m` when (a) its source text contains
-`".<mname>("` and (b) its declaring type has a field/property of `m`'s
-declaring type. Edges are logged as `D7 LOW_CONFIDENCE` on stderr. 10 edges
-synthesized, all verified semantically correct (including safe variants
-mapping to safe methods only). Result: csharp A recall 8/10 → 10/10. The
-`taint_confirm.sc` dataflow side (cross-file flows still UNCONFIRMED)
-remains open.
-
-Update (2026-07): the same nested-call gap bites the FORWARD direction —
-`extract_entrypoint_snippets.sc` (category-B path) missed
-`_orderService.Transfer(...)` inside `Ok(...)`, starving the LLM of the
-service bodies (found when the ground-truth label leak was fixed and cs B
-honestly dropped to 5/7). Added the mirror-image fallback: a Services/Data
-method counts as a callee of a controller method when the controller's
-source contains `".<name>("` and holds a field of the callee's declaring
-type. cs B back to 7/7 without label leakage.
 
 ## Decided against / deferred
 
@@ -562,3 +237,40 @@ type. cs B back to 7/7 without label leakage.
   shape-aware rules remain the sink oracle. No change.
 - **New source kinds (file uploads, websocket/CLI inputs)**: out of scope for
   the web-only taxonomy.
+
+## Archived decisions (full text removed 2026-11-01 for cleanliness)
+
+One-liners so references elsewhere stay resolvable; full texts in git
+history (revisions of this file before 2026-11-01).
+
+- **D1. Route-parameter taint sources** — implemented 2026-07;
+  per-language handler-param sources live in `taint_confirm.sc`.
+- **D2. Name-first sink matching** — implemented 2026-07; ±3-line window
+  with name ranking in `taint_confirm.sc` / `backward_from_sinks.sc`.
+- **D3. Chain-level confirmation report** — implemented 2026-07;
+  `CHAINS_JSON` side output + `scripts/chain_report.py`.
+- **D4. Flow dedup by (entrypoint × sink), cap 3** — implemented 2026-07.
+- **D5. JS import-binding call-edge repair** — resolved 2026-07 on the
+  chain side (js A recall 9/10 → 10/10); the module-variable DFG gap in
+  `taint_confirm.sc` remains open (LIMITATIONS.md §3).
+- **D6. Write-sites attached to chain snippets** — DROPPED 2026-09-10:
+  the A-class agent covers store sites at runtime; kept here so it isn't
+  re-proposed.
+- **D7. C# name/source-text call-site fallback** — resolved 2026-07
+  (csharp recall 8/10 → 10/10); the dormant C# branches remain in the
+  joern scripts as generic tooling (kept per D18). Moot for benchmarking
+  after D18.
+- **D8/D9. JSP transpile-to-Java + pipeline wiring** — superseded
+  2026-09-05: jsp-legacy and the transpiler were removed; the dormant
+  `out.print` rule branch remains in `sinks-java.yml` (inert for the
+  remaining targets).
+- **D11. Enterprise-grade pilot target** — target user-deleted 2026-10;
+  its live residue is the no-marker rule (generalized by D15).
+- **D12. Entrypoint detection by directory + rule arity fixes** —
+  implemented 2026-09; the `(routes|api)/.*\.py$` convention and the
+  multi-arg eval/yaml.load patterns live in the rules and joern scripts.
+- **D13. Documentation consolidation (one markdown per role)** —
+  implemented 2026-09; still governs this repo's doc layout.
+- **D14. Agent productization first; self-evolution deferred** —
+  implemented; the current sequencing lives in `plan.md` (M9 done →
+  M14.1 next).

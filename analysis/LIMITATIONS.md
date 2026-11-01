@@ -183,13 +183,13 @@ Evidence for each item: PROGRESS.md (M0–M8 entries) and the retired
   The class stays open because a *new* output format can always introduce a
   new shape; what changed is that such a shape now fails loudly instead of
   passing quietly.
-- **Enterprise validation gap.** On the layered python-flask-enterprise
-  target joern confirms only 13/25 chains (52%), and the LLM judge + full
-  agent run is still pending — drill-down load on real-world code is
-  extrapolated from the small targets, not measured. *Update 2026-10-04
-  (D16):* the gate used to fail unconditionally on this target (no judge
-  baseline, since it was frozen `--skip-llm`); it now reports SKIP, which
-  is honest — the target is measured by nothing until the re-pin.
+- **Real-world validation gap.** Drill-down load on real-world code is
+  extrapolated from the small targets, not measured. The one layered pilot
+  (`python-flask-enterprise`) confirmed only 13/25 chains (52%) before the
+  user deleted it 2026-10 (git history); the LLM/agent layer never ran on
+  it. The replacement validation field is an open M14.3 question (plan.md)
+  — candidates: the engine-backed `java-fix-gateway` (non-HTTP, registry
+  dispatch) or a rebuilt layered web pilot.
 - **csharp-aspnet CPG cannot be rebuilt on this machine (2026-11-01).**
   `csharpsrc2cpg`'s `dotnetastgen-macos` is an x86_64 binary and this
   arm64 host has no Rosetta, so `joern-parse` on csharp-aspnet silently
