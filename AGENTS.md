@@ -213,6 +213,13 @@ When adding/modifying a vulnerability:
   --check-leak --snippets <snips.jsonl> --ground-truth targets/<t>/ground_truth.json`
   (and the entrypoints variant with `--snippets <ep_snippets.jsonl>`). Runs
   in CI/without an API key; non-zero exit on a leak.
+- **LLM runs on this host:** httpx reads the macOS *system* proxy bypass
+  list when no proxy env var is set, and chokes on IPv6 bypass entries
+  (`httpx.InvalidURL: Invalid port: ':1]'` from a `::1`/`[::1]` bypass
+  entry). Launch LLM stages with a clean override, e.g.
+  `env -u HTTP_PROXY -u HTTPS_PROXY -u http_proxy -u https_proxy -u ALL_PROXY -u all_proxy no_proxy=localhost,127.0.0.1 NO_PROXY=localhost,127.0.0.1 python3 agent/run_baseline.py ...`
+  (env `no_proxy` shadows the system bypass list; DeepSeek is reached
+  directly, no proxy needed).
 - Python: `python3 -m py_compile` all `.py` in the target.
 - JS: `node --check` all `.js` in the target (TS is verified via joern-parse).
 - PHP: `php -l` all `.php` if a PHP runtime is installed; otherwise a
