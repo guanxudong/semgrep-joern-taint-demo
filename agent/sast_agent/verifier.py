@@ -1,8 +1,8 @@
-"""Adversarial review (AGENT_MVP_PLAN.md §7, milestone M4).
+"""Adversarial review for vulnerable verdicts.
 
-For every finding the investigator judged vulnerable, two INDEPENDENT
-rounds run on fresh agent instances. Each sees the evidence package (sink,
-chain, evidence refs, verdict) but not the investigator's message history:
+For every finding judged vulnerable, two INDEPENDENT rounds run on fresh
+agent instances. Each sees the evidence package (sink, chain, evidence
+refs, verdict) but not the tracing agent's message history:
 
 - **attacker**: construct a concrete trigger HTTP request (method, path,
   parameters, payload) and walk the data hop by hop to the sink. Failure
@@ -21,8 +21,7 @@ changes a verdict by itself.
 Reports come back via a submit_report tool call (extracted from the
 message history), NOT output_type: the DeepSeek thinking-mode endpoint
 rejects the tool_choice that pydantic-ai's structured output emits
-("Thinking mode does not support this tool_choice") — the same reason
-investigator.py submits via submit_finding.
+("Thinking mode does not support this tool_choice").
 
 Usage:
     from sast_agent.verifier import verify_finding
@@ -101,7 +100,7 @@ entrypoint to the sink:
 
 Rules:
 - Use read_function and search_code to inspect the real code — do not
-  rely on the investigator's summary alone.
+  rely on the original verdict's summary alone.
 - Report effective_sanitizer=true ONLY when you can point at concrete
   code: put its "file:start-end" refs in refs and name the kind. A
   superficial, bypassable or unrelated check does NOT count.
@@ -127,10 +126,10 @@ def _context(finding: Finding) -> str:
         if c.path:
             lines.append("Chain path: " + " -> ".join(c.path))
     else:
-        lines.append("Call chain: (none — investigator drilled manually)")
-    lines.append(f"Investigator verdict: VULNERABLE "
+        lines.append("Call chain: (none — traced manually hop by hop)")
+    lines.append(f"Original verdict: VULNERABLE "
                  f"(confidence {finding.verdict.confidence:.2f})")
-    lines.append(f"Investigator reasoning: {finding.verdict.reasoning}")
+    lines.append(f"Original reasoning: {finding.verdict.reasoning}")
     if finding.evidence:
         lines.append("Evidence collected:")
         for e in finding.evidence:
@@ -195,7 +194,7 @@ def _build_defender() -> Agent:
 
 def _extract_report(messages, model):
     """The report submitted via the submit_report tool call (latest valid
-    one wins) — same extraction pattern as investigator._extract_submission."""
+    one wins) — scan the message history backwards for the ToolCallPart."""
     for msg in reversed(messages):
         for part in getattr(msg, "parts", []):
             if isinstance(part, ToolCallPart) and part.tool_name == "submit_report":
@@ -303,8 +302,8 @@ adversarial review. Another analyst judged the suspected category-B
 vulnerability below VULNERABLE — a check that SHOULD exist is reportedly
 missing from the handler. Your job is to disprove it.
 
-The check may live OUTSIDE the handler — the investigator only saw the
-handler and its callees. Hunt for guards mounted at the framework level:
+The check may live OUTSIDE the handler — the original analyst only saw
+the handler and its callees. Hunt for guards mounted at the framework level:
 - Flask: before_request handlers, blueprint registration with guards,
   decorators applied at import time
 - Express: app.use(...) middleware chains
@@ -317,7 +316,7 @@ check, field allow-list, lock/atomic op, server-side invariant).
 
 Rules:
 - Use read_function and search_code to inspect the real code — do not
-  rely on the investigator's summary alone.
+  rely on the original verdict's summary alone.
 - Report effective_sanitizer=true ONLY when you can point at concrete
   code: put its "file:start-end" refs in refs and name the kind. A
   superficial, bypassable or unrelated check does NOT count.

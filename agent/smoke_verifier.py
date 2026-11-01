@@ -8,22 +8,24 @@
 #     "httpx[socks]>=0.27",
 # ]
 # ///
-"""M4 acceptance smoke (AGENT_MVP_PLAN.md §8-M4): the verifier's defender
-must intercept a false positive before it reaches the CONFIRMED column.
+"""Acceptance smoke for the adversarial verifier: the defender must
+intercept a false positive before it reaches the CONFIRMED column.
 
 For every SAFE category-A ground-truth entry that has a matching finding in
-workspace/agent-reports/<target>/findings.jsonl (produced by a previous
-run_agent.py run), the script:
+the latest tracer batch report
+(workspace/agent-reports/<date>-trace/<target>/findings.jsonl, produced by
+a previous `uv run --offline agent/run_trace.py --target all` run), the
+script:
 
-1. forces the finding to VULNERABLE/CONFIRMED — simulating an investigator
-   mistake on a safe sample;
+1. forces the finding to VULNERABLE/CONFIRMED — simulating a tracer mistake
+   on a safe sample;
 2. runs the real attacker/defender rounds (verifier.verify_finding);
 3. applies the mechanical merge (report.apply_verifier);
 4. checks the FP did NOT survive as vulnerable+CONFIRMED — and reports
    whether the defender achieved a full veto (verdict flipped).
 
 Ground truth is read here only because this is the test harness, never by
-any agent tool (red line §9.2).
+any agent tool (red line).
 
 Usage:
     uv run --offline agent/smoke_verifier.py --target python-flask
@@ -64,11 +66,23 @@ def _matches(f: dict, entry: dict) -> tuple[bool, bool]:
     return bool(verdicts), any(v.get("primary") for v in verdicts)
 
 
+def _find_findings(target: str) -> Path | None:
+    """Latest findings.jsonl for a target: batch trace report first
+    (<date>-trace/<target>/), then single-target trace layout."""
+    batch = sorted(REPORTS_ROOT.glob(f"*-trace/{target}/findings.jsonl"),
+                   key=lambda p: p.stat().st_mtime)
+    if batch:
+        return batch[-1]
+    single = REPORTS_ROOT / f"{target}-trace" / "findings.jsonl"
+    return single if single.is_file() else None
+
+
 async def check_target(target: str) -> tuple[int, int, int]:
     """Returns (checked, passed, vetoed)."""
-    findings_path = REPORTS_ROOT / target / "findings.jsonl"
-    if not findings_path.is_file():
-        log(f"{target}: no findings at {findings_path} — run run_agent.py first")
+    findings_path = _find_findings(target)
+    if findings_path is None:
+        log(f"{target}: no findings under {REPORTS_ROOT} — "
+            "run run_trace.py first")
         return 0, 0, 0
     cfg = config.target_cfg(target)
     findings = report_mod.load_findings(str(findings_path))
@@ -99,7 +113,7 @@ async def check_target(target: str) -> tuple[int, int, int]:
                 f"already keeps it out of the FP column)")
             continue
         checked += 1
-        # simulate the investigator mistake: vulnerable at CONFIRMED level
+        # simulate the tracer mistake: vulnerable at CONFIRMED level
         forced = json.loads(json.dumps(match))  # deep copy
         forced["verdict"]["is_vulnerable"] = True
         forced["verdict"]["confidence"] = 0.9

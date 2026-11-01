@@ -1,10 +1,11 @@
-"""Agent tool set for the SAST agent (AGENT_MVP_PLAN.md §5 + §6A).
+"""Agent tool set for the SAST agent.
 
 SastTools wraps one benchmark target; each method is a thin, fact-only
 wrapper over the deterministic pipeline (pipeline.py), ripgrep, disk slices,
-or parameterized Joern query templates. investigator.py (M2) registers these
-with pydantic-ai. All writes are confined to the instance's cache dir;
-targets/ is read-only and ground-truth files are refused everywhere (§9).
+or parameterized Joern query templates. The agents (tracer, worker,
+verifier) call these through pydantic-ai tool registration or directly.
+All writes are confined to the instance's cache dir; targets/ is read-only
+and ground-truth files are refused everywhere (red line).
 
 Usage:
     tools = SastTools("python-flask")
@@ -18,7 +19,7 @@ import sys
 from pathlib import Path
 
 from . import config, pipeline
-from .contracts import (B_VULN_TYPES, BFinding, Finding, Hypothesis, Sink,
+from .contracts import (B_VULN_TYPES, BFinding, Hypothesis, Sink,
                         TaxonomyEntry)
 from .scrub import scrub, scrub_dicts
 
@@ -377,23 +378,10 @@ class SastTools:
 
     # ---- finding submission ----
 
-    def submit_finding(self, finding: dict) -> dict:
-        """Validate and record a Finding; ends the current sink's
-        investigation. (Budget enforcement is M2's job.)"""
-        try:
-            f = Finding.model_validate(finding)
-        except Exception as e:
-            return {"ok": False, "error": f"invalid Finding: {e}"}
-        out = self.cache_dir / "findings.jsonl"
-        with open(out, "a") as fh:
-            fh.write(f.model_dump_json() + "\n")
-        return {"ok": True, "sink": f.sink.id, "written_to": str(out)}
-
     def submit_b_finding(self, finding: dict) -> dict:
-        """Validate and record a category-B BFinding (§7A, M7); ends the
-        current hypothesis's investigation. Same pattern as submit_finding —
-        the tool call itself is the submission channel; run_worker.py owns
-        the final report-dir persistence."""
+        """Validate and record a category-B BFinding; ends the current
+        hypothesis's investigation. The tool call itself is the submission
+        channel; run_worker.py owns the final report-dir persistence."""
         try:
             f = BFinding.model_validate(finding)
         except Exception as e:

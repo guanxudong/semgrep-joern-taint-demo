@@ -1,6 +1,9 @@
-"""sast_agent — LLM + Semgrep + Joern investigation agent (see AGENT_MVP_PLAN.md).
+"""sast_agent — LLM + Semgrep + Joern investigation agent.
 
-M1 scope: config / contracts / pipeline / tools. Kept import-light so the
-package itself does not require pydantic until contracts/pipeline/tools are
-imported explicitly.
+A-class (sink-based) investigation is the tracer state machine
+(tracer.py + trace_engine.py + trace_schema.py + trace_prompts.py);
+category B (non-sink) is the planner/worker playbook pair
+(planner.py + worker.py); verifier.py reviews every vulnerable verdict.
+Kept import-light so the package itself does not require pydantic until
+contracts/pipeline/tools are imported explicitly.
 """

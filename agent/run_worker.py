@@ -8,7 +8,7 @@
 #     "httpx[socks]>=0.27",
 # ]
 # ///
-"""Category-B worker CLI (AGENT_MVP_PLAN.md §7A, milestone M7).
+"""Category-B worker CLI.
 
 Consumes the planner's hypothesis queue
 (workspace/agent-cache/<target>/hypotheses.jsonl — run
@@ -189,7 +189,7 @@ def run_all(limit: int, no_verify: bool, dry_run: bool,
             exclude: list[str] | None = None) -> int:
     """Batch mode: every target, sequential (14-18 hypotheses per target,
     fewer than A-class sinks — simple and reliable), plus an aggregate
-    summary_b.json. `exclude` skips targets (e.g. ["csharp-aspnet"])."""
+    summary_b.json. `exclude` skips targets (e.g. ["java-spring"])."""
     names = [n for n in config.TARGETS if n not in (exclude or [])]
     out_root = _date_out_root()
     log(f"batch mode: {len(names)} targets, sequential -> {out_root}")
@@ -239,7 +239,7 @@ def main() -> int:
                          "and the finalize/scoring path only")
     ap.add_argument("--exclude", default="",
                     help="comma-separated targets to skip in --target all "
-                         "(e.g. --exclude csharp-aspnet)")
+                         "(e.g. --exclude java-spring)")
     args = ap.parse_args()
 
     if not config.API_KEY and not args.dry_run:

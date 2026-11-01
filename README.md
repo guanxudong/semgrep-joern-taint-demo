@@ -1,8 +1,7 @@
 # SAST Benchmark Targets (Semgrep + Joern + LLM)
 
-Intentionally vulnerable, simplified web projects in four language stacks —
-plus a layered enterprise-style pilot (`python-flask-enterprise`) — built
-to evaluate an **LLM + Semgrep + Joern** SAST
+Intentionally vulnerable, simplified web projects in three language stacks —
+built to evaluate an **LLM + Semgrep + Joern** SAST
 pipeline:
 
 1. **Category A (sink-based)** — Semgrep finds sink call sites; Joern traces
@@ -21,17 +20,17 @@ targets/
 ├── java-spring/        Java + Spring Boot style (@RestController)
 ├── js-ts-express/      Express 4, mixed .js and .ts
 ├── python-flask/       Python + Flask (blueprints)
-├── csharp-aspnet/      C# + ASP.NET Core style controllers
 ├── perl-cgi/           Legacy CGI.pm-style Perl (no engine support by design)
 ├── java-fix-gateway/   Non-HTTP: FIX-style TCP order gateway (registry dispatch)
-├── csharp-fix-gateway/ Non-HTTP: FIX gateway mirror (C#/.NET buy-side idiom)
 ├── python-clearing-worker/  Non-HTTP: clearing/reconciliation message+file worker
 └── perl-clearing-worker/    Non-HTTP: clearing worker mirror (legacy Perl ops)
 ```
 
-(The legacy JSP target `jsp-legacy/` was removed on 2026-09-05 and the
-`python-flask-enterprise` / `php-laravel` pilots later; they live on in git
-history if ever needed again.)
+(The legacy JSP target `jsp-legacy/` was removed on 2026-09-05, the
+`python-flask-enterprise` / `php-laravel` pilots later, and both C# targets
+(`csharp-aspnet`, `csharp-fix-gateway`) on 2026-11-01 — csharpsrc2cpg cannot
+rebuild a CPG on this arm64 host, so they are out of the benchmark; all live
+on in git history if ever needed again.)
 
 Each HTTP project contains `routes|controllers/` (entrypoints), `services/`
 (business logic), `data|db/` (data access sinks), `config/` (hardcoded
@@ -49,16 +48,16 @@ own per-language idioms (e.g. `pickle.loads`/`Storable::thaw`,
 
 ### Category A — sink-based (Semgrep → sink, Joern → entrypoint)
 
-| Type | CWE | Java | JS/TS | Python | C# |
-|------|-----|------|-------|--------|-----|
-| SQL Injection | 89 | `Statement.executeQuery` concat | `mysql.query` concat | `cursor.execute` f-string | `SqlCommand` concat |
-| XSS | 79 | HTML concat response | `res.send` concat | HTML concat response | `Content(..., "text/html")` concat |
-| Command Injection | 78 | `Runtime.exec` | `child_process.exec` | `os.system` | `Process.Start("cmd.exe","/c ...")` |
-| Path Traversal | 22 | `Files.readAllBytes` | `fs.readFileSync` | `open(base+name)` | `File.ReadAllText` |
-| RCE (code eval) | 94 | `ScriptEngine.eval` | `eval()` | `eval()` | CodeDom `CompileAssemblyFromSource` |
-| XXE | 611 | `DocumentBuilderFactory` (DTD on) | `libxmljs noent:true` | lxml `resolve_entities=True` | `DtdProcessing.Parse` + resolver |
-| Deserialization | 502 | `ObjectInputStream.readObject` | `node-serialize.unserialize` | `pickle.loads` | `BinaryFormatter.Deserialize` |
-| SSTI | 1336 | Freemarker `new Template` | `ejs.render` | `render_template_string` | RazorEngine `RunCompile` |
+| Type | CWE | Java | JS/TS | Python |
+|------|-----|------|-------|--------|
+| SQL Injection | 89 | `Statement.executeQuery` concat | `mysql.query` concat | `cursor.execute` f-string |
+| XSS | 79 | HTML concat response | `res.send` concat | HTML concat response |
+| Command Injection | 78 | `Runtime.exec` | `child_process.exec` | `os.system` |
+| Path Traversal | 22 | `Files.readAllBytes` | `fs.readFileSync` | `open(base+name)` |
+| RCE (code eval) | 94 | `ScriptEngine.eval` | `eval()` | `eval()` |
+| XXE | 611 | `DocumentBuilderFactory` (DTD on) | `libxmljs noent:true` | lxml `resolve_entities=True` |
+| Deserialization | 502 | `ObjectInputStream.readObject` | `node-serialize.unserialize` | `pickle.loads` |
+| SSTI | 1336 | Freemarker `new Template` | `ejs.render` | `render_template_string` |
 
 ### Category B — non-sink (Joern entrypoint → forward analysis)
 
@@ -105,7 +104,6 @@ semgrep --config=auto --json --output=semgrep_py.json targets/python-flask
 joern-parse targets/python-flask --output py_cpg.bin
 joern-parse targets/java-spring --output java_cpg.bin
 joern-parse targets/js-ts-express --output js_cpg.bin
-joern-parse targets/csharp-aspnet --output cs_cpg.bin
 
 # then explore, e.g.
 joern --script your_script.sc   # with the CPG imported
@@ -129,7 +127,7 @@ python3 scripts/semgrep_to_sinks.py /tmp/raw_py.json --root targets/python-flask
 SINKS_FILE=/tmp/sinks_py.json joern --script analysis/joern/backward_from_sinks.sc py_cpg.bin
 #    (omit SINKS_FILE to enumerate sinks from the CPG's built-in name table instead)
 
-# 3a. Joern entrypoint enumeration (JSON lines; works for all 4 languages)
+# 3a. Joern entrypoint enumeration (JSON lines; works for all 3 web stacks)
 joern --script analysis/joern/find_entrypoints.sc py_cpg.bin
 
 # 3b. Joern forward trace: entrypoint -> callee -> ... -> leaves, sinks marked
@@ -158,9 +156,9 @@ Files:
 
 | Path | Purpose |
 | ---- | ------- |
-| `analysis/rules/sinks-{python,java,js,csharp}.yml` | Semgrep sink rules, 8 category-A classes per language |
+| `analysis/rules/sinks-{python,java,js}.yml` | Semgrep sink rules, 8 category-A classes per language |
 | `scripts/semgrep_to_sinks.py` | Semgrep JSON → compact sink list (`file`/`line`/`rule`/`vuln_type`) |
-| `analysis/joern/find_entrypoints.sc` | Entrypoint enumeration (Flask routes, Spring mappings, Express router calls, ASP.NET attributes) |
+| `analysis/joern/find_entrypoints.sc` | Entrypoint enumeration (Flask routes, Spring mappings, Express router calls) |
 | `analysis/joern/backward_from_sinks.sc` | Reverse call-chain walk from each sink to an entrypoint |
 | `analysis/joern/forward_from_entrypoints.sc` | Forward call-graph walk from each entrypoint, sinks marked |
 | `analysis/joern/extract_chain_snippets.sc` | Dumps source code of every method on each sink→entrypoint chain (JSON lines; set `SRC_ROOT` to the parse root when the frontend leaves method `code` empty) |
@@ -170,40 +168,53 @@ Files:
 | `scripts/llm_judge_entrypoints.py` | LLM judgment layer, category B (same DeepSeek setup): judges each entrypoint + forward-reachable source against all 7 non-sink classes and scores the category-B ground-truth entries (file+function match, route fallback) |
 
 The same commands work for the other targets — swap the rules file
-(`sinks-java.yml`, `sinks-js.yml`, `sinks-csharp.yml`) and the CPG.
+(`sinks-java.yml`, `sinks-js.yml`) and the CPG.
 
 ## Autonomous investigation agent (`agent/`)
 
 The `agent/` directory turns the fixed pipeline above into a **pydantic-ai
-investigation agent** (spec: `docs/AGENT_MVP_PLAN.md` — closed, status/handoff:
-`agent/HANDOFF.md`): the Semgrep/Joern stages become tools the agent calls
-on demand, an investigator agent drills into the cases the deterministic
-pipeline leaves UNCONFIRMED (cross-file field stores, module variables),
-and an attacker/defender verifier reviews every vulnerable verdict before
-it reaches the report.
+investigation agent**. Category A (sink-based) uses the **tracer state
+machine**: the Python orchestrator owns a per-sink `TraceState` dossier and
+executes every engine step itself (`trace_engine.py`, one Joern JVM per
+directive), while the LLM answers ONE structured `TraceStep` per round —
+resolve candidates, judge completeness, issue at most one directive from a
+closed menu (`callers_of` / `writes_to` / `reads_of` / `find_call_sites` /
+`trace_back` / `methods_in_file` / `read_file` / `search_code`). The LLM
+never touches Joern syntax, and every LLM-inferred hop must carry a
+disk-checkable `justify_ref`. Category B (non-sink) uses the
+planner/worker pair (`run_planner.py` → `run_worker.py`), and every
+vulnerable verdict passes an attacker/defender adversarial review
+(`verifier.py`) before it reaches the report.
 
 ```bash
-# one target (reports -> workspace/agent-reports/<target>/)
-uv run --offline agent/run_agent.py --target python-flask
+# category A, one target (reports -> workspace/agent-reports/<target>-trace/)
+uv run --offline agent/run_trace.py --target python-flask
 
-# all five targets, parallelism 2 (reports -> workspace/agent-reports/<date>/)
-uv run --offline agent/run_agent.py --target all
+# category A, all registered targets, parallelism 2
+# (reports -> workspace/agent-reports/<date>-trace/)
+uv run --offline agent/run_trace.py --target all
+
+# category B (planner then worker)
+uv run --offline agent/run_planner.py --target python-flask
+uv run --offline agent/run_worker.py --target python-flask
 
 # regression gate against the frozen baseline: non-zero exit when
 # category-A recall drops or a new safe-sample FP appears
 python3 agent/run_baseline.py --compare
 ```
 
-MVP status (M0–M8 done, spec closed): category-A recall 10/10 on all four
-small targets with 0 safe-sample false positives; category-B recall 7/7 with
-only the four baseline-known safe-02 FPs (2026-09-05 M8 gate PASS). Details
-and per-milestone numbers: `PROGRESS.md`, `agent/HANDOFF.md`. Post-MVP
-roadmap: `plan.md`.
+Status (2026-11-01): category-A recall 10/10 on all three web targets via
+the tracer, 0 safe-sample FPs, baseline gate PASS; category-B recall 7/7
+with only the baseline-known safe-02 FPs. The old free-form investigator
+path was retired after the tracer passed the gate (DECISIONS.md D19).
+Details: `PROGRESS.md`; roadmap: `plan.md`.
 
 ## Notes
 
-- Joern's C# frontend (csharpsrc2cpg) is less mature; expect coarser CPGs for
-  `csharp-aspnet` (attribute routing / model binding only partially modeled).
+- The C# targets (`csharp-aspnet`, `csharp-fix-gateway`) were removed on
+  2026-11-01: `csharpsrc2cpg`'s astgen is x86_64 and this arm64 host has no
+  Rosetta, so their CPGs can no longer be rebuilt (LIMITATIONS.md §3). They
+  live on in git history.
 - `js-ts-express` mixes `.js` and `.ts`; filter by extension for per-language
   scoring.
 - Dataflow confirmation (`taint_confirm.sc`) verified results per language:
@@ -214,8 +225,5 @@ roadmap: `plan.md`.
     `new Configuration(...)` line, one off from the tainted `new Template`).
   - **js/ts**: most sinks CONFIRMED with route-attributed sources; the
     module-level field chain (`js-sqli-02`, `pendingName`) is NOT tracked by
-    OSS dataflow across files — instance-field chains (java/python/csharp)
+    OSS dataflow across files — instance-field chains (java/python)
     are tracked, module-scope variables are not.
-  - **csharp**: in-controller sinks CONFIRMED (controller action params as
-    sources); cross-file flows into `Services/` are lost (frontend
-    limitation), so `cs-cmdi-02`, `cs-path-traversal-01` stay UNCONFIRMED.

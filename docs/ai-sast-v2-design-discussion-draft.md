@@ -716,6 +716,7 @@ agents 只通过接口调用 domain 与 tools
 
 - `AGENTS.md`：当前 target、15 类 taxonomy 与工程约束；
 - `analysis/LIMITATIONS.md`：当前引擎与 Agent 层局限；
-- `docs/AGENT_MVP_PLAN.md`：原 Agent 化设计的历史规格；
 - `plan.md`：当前 post-MVP 路线图；
-- `agent/HANDOFF.md`：现有 Agent 实现与验证记录。
+- `PROGRESS.md` / `DECISIONS.md`：执行与决策记录（含 D18 C# 目标移除、
+  D19 investigator 路径退役——原 `AGENT_MVP_PLAN.md` / `agent/HANDOFF.md`
+  已于 2026-11-01 删除，可在 git 历史查阅）。

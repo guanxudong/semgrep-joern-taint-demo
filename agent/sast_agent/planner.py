@@ -1,4 +1,4 @@
-"""Category-B planner agent (AGENT_MVP_PLAN.md §7A, milestone M6).
+"""Category-B planner agent.
 
 One pydantic-ai Agent run per target reads the repo-map digest (route table
 + symbol summaries) and produces the hypothesis queue: every route that

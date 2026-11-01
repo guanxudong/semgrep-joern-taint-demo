@@ -1,9 +1,9 @@
-"""Per-hypothesis category-B worker agent (AGENT_MVP_PLAN.md §7A, M7).
+"""Per-hypothesis category-B worker agent.
 
-Clones the investigator.py skeleton (build_agent + _ToolGuard call
-counting/logging + asyncio.wait_for timeout + UsageLimits + ToolCallPart
-submission extraction + honest synthesized fallback), but the evidence
-shape is different: a B-class finding proves an ABSENT check, not a
+Builds one pydantic-ai agent per hypothesis (tool-call counting/logging +
+asyncio.wait_for timeout + UsageLimits + ToolCallPart submission extraction
++ honest synthesized fallback); the evidence shape is different from
+category A: a B-class finding proves an ABSENT check, not a
 dangerous call. The playbook is the absence-comparison method (§7A
 lines 333-346):
 
@@ -163,9 +163,9 @@ class _ToolGuard:
 def build_agent(hyp: Hypothesis, guard: _ToolGuard) -> Agent:
     """The category-B worker agent (one per hypothesis so the prompt can
     carry the route/class). All code-returning tools strip the
-    VULN:/SAFE: ground-truth markers (red line §9.2) — unlike the A-class
-    investigator's read_function, which is a known M3 leak surface kept
-    as-is for comparability."""
+    VULN:/SAFE: ground-truth markers (red line) — the category-A
+    read_function deliberately keeps the historical unscrubbed behavior
+    for cross-path comparability."""
     agent = Agent(
         OpenAIChatModel(config.MODEL, provider=OpenAIProvider(
             base_url=config.BASE_URL, api_key=config.API_KEY)),
@@ -243,8 +243,8 @@ def build_prompt(hyp: Hypothesis) -> str:
 
 def _extract_submission(messages) -> BFindingSubmission | None:
     """The submission the agent made via the submit_b_finding tool call
-    (latest valid one wins) — same pattern as
-    investigator._extract_submission."""
+    (latest valid one wins) — scan the message history backwards for the
+    ToolCallPart, same pattern the other agents use."""
     for msg in reversed(messages):
         for part in getattr(msg, "parts", []):
             if isinstance(part, ToolCallPart) and part.tool_name == "submit_b_finding":

@@ -11,6 +11,49 @@ states the decision and the rationale. See `PROGRESS.md` for execution order.
 > `_jspService` entrypoint detection, `_jsp.java→.jsp` scorer
 > normalization) remain dormant and harmless for the 4 remaining targets.
 
+## Target coverage (2026-11-01)
+
+### D18. C# targets removed: csharpsrc2cpg cannot rebuild CPGs on this host
+
+Gap: on 2026-11-01 a re-parse of `csharp-aspnet` silently produced a
+0-method empty CPG — `csharpsrc2cpg`'s `dotnetastgen-macos` is an x86_64
+binary and this arm64 host has no Rosetta (LIMITATIONS.md §3). Any future
+csharp source edit would trigger `pipeline.ensure_cpg` to rebuild into
+that empty CPG, so the target can no longer be honestly re-benchmarked
+here. Generic C# *tooling* (tree-sitter repo-map extraction, the
+joern-script C# fallbacks) is language-generic and stays; only the
+benchmark targets go.
+
+Decision (user): remove both C# targets — `targets/csharp-aspnet` and its
+non-HTTP mirror `targets/csharp-fix-gateway` (D17) — from the repo, and
+drop the `csharp-aspnet` entry from `run_baseline.py`'s TARGETS (the next
+freeze prunes it from `baseline.json`, same mechanism as jsp-legacy).
+Benchmark scope going forward: the three engine-backed web stacks
+(java-spring / js-ts-express / python-flask) plus the engine-backed
+java-fix-gateway, with perl-cgi / perl-clearing-worker kept deliberately
+as the no-engine tier-3 degraded-mode targets. Recoverable from git
+history (e.g. after `softwareupdate --install-rosetta`).
+
+### D19. Investigator path retired: the tracer is the only A-class path
+
+Context: since M9 (2026-11-01) the A-class investigation had two
+implementations side by side — the original free-form investigator
+playbooks (LLM with five tools, full-history replay) and the tracer state
+machine. The standing arrangement: the old path stays until the tracer
+passes the frozen baseline gate.
+
+On 2026-11-01 the tracer passed the gate end to end
+(`run_baseline.py --compare` on the full batch: A recall 10/10 on all
+three web targets — java-spring above its frozen 8/10 — 0 new safe-sample
+FPs, GATE: PASS), so the old path was deleted the same day: `agent/run_agent.py`,
+`sast_agent/investigator.py`, `tools.submit_finding`, and the
+investigator-only budget constant. `run_trace.py` inlined the
+`finalize_target` post-run tail it previously imported from run_agent.
+Retired docs (closed-MVP spec, handoff, investigator walkthrough) went
+with it — all recoverable from git history. The B-class planner/worker
+playbooks are unchanged; the attacker/defender verifier is shared by both
+classes and stays.
+
 ## Target coverage (2026-07)
 
 ### D8. JSP support via transpile-to-Java

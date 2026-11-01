@@ -25,10 +25,10 @@ Usage:
     python3 agent/run_baseline.py --targets python-flask,java-spring
     python3 agent/run_baseline.py --skip-llm           # deterministic stages only
     python3 agent/run_baseline.py --force              # redo cached artifacts
-    python3 agent/run_baseline.py --compare [summary.json]  # M5/M8 regression gate
+    python3 agent/run_baseline.py --compare [summary.json]  # regression gate
 
-M5/M8 regression gate (--compare, plan §8-M5/§8-M8): compares an agent batch
-run's summary.json (A-class, run_agent) or summary_b.json (B-class,
+Regression gate (--compare): compares an agent batch run's
+summary.json (A-class, run_trace) or summary_b.json (B-class,
 run_worker) — auto-detected by content — (default: the latest
 workspace/agent-reports/*/summary*.json) against this frozen baseline. Exit
 code is non-zero when any compared target's recall drops below the baseline
@@ -115,11 +115,6 @@ TARGETS = {
         "tree": "targets/python-flask",
         "ground_truth": "targets/python-flask/ground_truth.json",
     },
-    "python-flask-enterprise": {
-        "rules": "analysis/rules/sinks-python.yml",
-        "tree": "targets/python-flask-enterprise",
-        "ground_truth": "targets/python-flask-enterprise/ground_truth.json",
-    },
     "java-spring": {
         "rules": "analysis/rules/sinks-java.yml",
         "tree": "targets/java-spring",
@@ -130,11 +125,8 @@ TARGETS = {
         "tree": "targets/js-ts-express",
         "ground_truth": "targets/js-ts-express/ground_truth.json",
     },
-    "csharp-aspnet": {
-        "rules": "analysis/rules/sinks-csharp.yml",
-        "tree": "targets/csharp-aspnet",
-        "ground_truth": "targets/csharp-aspnet/ground_truth.json",
-    },
+    # csharp-aspnet removed 2026-11-01: csharpsrc2cpg cannot rebuild its CPG
+    # on this arm64 host (LIMITATIONS.md §3), so it is out of the benchmark.
 }
 
 
@@ -517,7 +509,7 @@ def _latest_summary(b_mode: bool | None = None) -> Path:
         candidates = same
     if not candidates:
         sys.exit(f"no agent batch summary found under {root} "
-                 "(run: uv run agent/run_agent.py --target all or "
+                 "(run: uv run agent/run_trace.py --target all or "
                  "uv run agent/run_worker.py --target all)")
     return candidates[-1]
 
@@ -539,9 +531,9 @@ def compare_with_baseline(summary_path: Path, *, require_baseline: bool = False,
                           cost_baseline: Path | None = None,
                           min_confirmed_rate: float | None = None,
                           forbid_leak: bool = False) -> int:
-    """M5/M8 regression gate, extended with provenance + budget dimensions.
+    """Regression gate, extended with provenance + budget dimensions.
 
-    Auto-detects the summary shape — A-class summary.json (run_agent) or
+    Auto-detects the summary shape — A-class summary.json (run_trace) or
     B-class summary_b.json (run_worker). Per target: FAIL on a recall drop
     below the frozen baseline, a NEW safe-sample FP, a confirmed-rate floor,
     a token overrun vs the previous batch of the same shape, or a recorded

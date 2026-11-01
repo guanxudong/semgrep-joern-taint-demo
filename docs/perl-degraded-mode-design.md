@@ -51,8 +51,9 @@
 - sink 数据契约:`scripts/semgrep_to_sinks.py:39-47` 输出
   `{file, line, rule, vuln_type, cwe}` JSON 数组——任何替代 sink 源
   只要产出同一 schema 即可无缝接入下游。
-- 证据引用扩展名硬编码 3 处:`report.py:413`、`investigator.py:173`、
-  `worker.py:129`(均为 `(?:py|js|ts|java|cs|jsp)`)。
+- 证据引用扩展名硬编码 3 处:`report.py`、`trace_schema.py`(_REF_SHAPE)、
+  `worker.py`(均为 `(?:py|js|ts|java|cs|jsp)`；investigator.py 的第三处
+  已随 D19 退役)。
 - target 注册表两处:`agent/sast_agent/config.py:91-111` 与
   `agent/run_baseline.py:66-87`(形状相同,手工同步)。
 - D8 转译先例(jsp→java)的 `"pre"` 钩子仍留在
@@ -135,9 +136,9 @@ LLM/agent 层)一致——D6 已证明:LLM 用 `search_code` 接力能覆盖引�
 - `run_baseline.py:66-87` 的 TARGETS 镜像同步;stage 接线按 `engines`
   条件化。
 
-### 3.3 A 类无链 brief(investigator 降级)
+### 3.3 A 类无链 brief(tracer 降级;本文写于 investigator 时代,D19 后由 tracer 承担)
 
-现状:investigator 的简报来自 `get_chains`(sink→entrypoint 反向链)。
+现状:A 类简报来自 `get_chains`(sink→entrypoint 反向链),由 tracer 消费。
 降级:种子 = sink 记录(file/line/rule)+ `read_function` 取所在 sub
 全文 + `search_code` 找调用方逐跳接力(即今天 `joern_query` 失败后的
 manual relay 路径,转为主路径)。LLM 判读的输入从"CPG 链 + 源码切片"
@@ -168,7 +169,7 @@ tree-sitter-language-pack 已自带 perl grammar(无需新依赖,平台 wheel
 
 ### 3.6 评分/报告适配(零碎但必须)
 
-- `_REF_RE` 三处(report.py:413、investigator.py:173、worker.py:129)
+- `_REF_RE` 三处(report.py、trace_schema.py、worker.py)
   扩展名加 `pl|pm|t`。
 - judges/`report.py` 的 `simple_name` 与 route label:Perl 没有 joern
   fullName,命名约定由自家 extractor 定义,保持 `文件::sub` 形态即可;
@@ -205,7 +206,7 @@ tree-sitter-language-pack 已自带 perl grammar(无需新依赖,平台 wheel
 2. `repo_map.py` perl 注册(§3.5)。
 3. `scripts/perl_sinks.py` sink 扫描器(§3.1)。
 4. `engines` 配置位接线(§3.2)+ `run_baseline.py` 镜像。
-5. investigator 无链 brief(§3.3)+ `get_forward_slice` fallback(§3.4)。
+5. tracer 无链 brief(§3.3)+ `get_forward_slice` fallback(§3.4)。
 6. `targets/perl-mojo/`(建议 Mojolicious:路由显式、tree-sitter 友好;
    CGI 目录风格备选)+ `ground_truth.json`/`GROUND_TRUTH.md`,遵循
    AGENTS.md 变更协议(VULN:/SAFE: 标记、15 类分类法镜像)。

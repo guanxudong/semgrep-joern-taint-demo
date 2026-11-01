@@ -1,8 +1,9 @@
 # AI SAST agent 产品化路线图（post-MVP）
 
-> 2026-09-10 制定。M0–M8 已全部关闭（规格 `docs/AGENT_MVP_PLAN.md`，执行记录
-> `agent/HANDOFF.md`），benchmark 在天花板：A 类 recall 4/4 target 10/10、
-> B 类 7/7、SAFE FP 仅基线自带四个。本计划是 post-MVP 路线图，按 ROI 排序。
+> 2026-09-10 制定。M0–M8 已全部关闭（原规格与执行记录随 investigator
+> 路径于 2026-11-01 一并退役，见 DECISIONS.md D19；历史可在 git 查到），
+> benchmark 在天花板：A 类 recall 10/10、B 类 7/7、SAFE FP 仅基线自带。
+> 本计划是 post-MVP 路线图，按 ROI 排序。
 >
 > 2026-09-23 更新：enterprise 试点 `targets/python-flask-enterprise/` 已建
 > （DECISIONS.md D11/D12；确定性基线已冻结，joern 仅 13/25 链 CONFIRMED，
@@ -21,7 +22,8 @@
 >   verdict 或防正确性漂移时才做（D6、taint_confirm 的 D5/D7 数据流侧已
 >   据此放弃，见 DECISIONS.md 与 PROGRESS.md "Remaining backlog"）。
 > - 一切变更过 `run_baseline.py --compare` 门禁；不改 rules 评分作弊、不改
->   ground_truth、不动 targets 的红线不变（`docs/AGENT_MVP_PLAN.md` §9）。
+>   ground_truth、不动 targets 的红线不变（AGENTS.md "Core constraints" +
+>   "Changing the targets"）。
 > - LLM 接出的任何事实（链边、证据）必须带磁盘可解析 ref，过机械校验层。
 
 ## 排序总览（2026-09-23 重排：AI SAST agent 产品化为主线）
@@ -37,7 +39,7 @@ Phase 2）：benchmark 已到顶，先把"能跑、量得准、跑得起"做完�
 | 1 | M14.1 | 统一编排器 + 分阶段漏斗报告 | ~1.5d | 产品骨架；漏斗报告是解读一切验证结果的仪器 |
 | 2 | M14.3 | enterprise 全量验证 | ~1d + token 预算 | 唯一无过拟合验证场；产出 M9 的目标清单和 M14.2 的成本画像 |
 | 3 | M14.2 | 批量判定三态化 + 模型分层 | ~2d | 最大成本杠杆；enterprise 级反复回归跑得起来的前提 |
-| 4 | M9 | LLM 断点续链机制化 | ~3d | 效果项；按 M14.3 实测失败清单做，不凭小靶子猜 |
+| 4 | ~~M9~~ ✅ 2026-11-01 | LLM 断点续链机制化（以 tracer 状态机落地） | ~3d → 已交付 | 效果项；按 M14.3 实测失败清单做，不凭小靶子猜 |
 | 5 | M11 | 知识库沉淀 + guard 前置 | ~1.5d | 成本项；独立，任何时候插入都是收益 |
 
 M13.2（模型漂移监控，~0.5d）不推后也不单独立项：随 baseline 重钉需求
@@ -55,6 +57,21 @@ M13.2（模型漂移监控，~0.5d）不推后也不单独立项：随 baseline 
 
 > 2026-09-23：本里程碑的目标断点形态清单以 M14.3 的 enterprise 实测
 > 失败归因为准，不再仅凭四个小靶子推断。
+>
+> **2026-11-01 状态：以状态机架构落地（用户重设计决定）。** 与下述
+> 原始拆分的关键偏差：不是给旧 investigator 加工具，而是新建
+> tracer 路径（`trace_schema.py` / `trace_engine.py` /
+> `trace_prompts.py` / `tracer.py` + `run_trace.py` + joern
+> `trace_step.sc`）——Python 编排器持有 TraceState，LLM 每轮只做一次
+> `PromptedOutput(TraceStep)` 填表（消歧上轮候选 + 完整性判定 + 至多
+> 一条封闭枚举指令），不挂工具、不写 joern 语法。理由：省一个数量级
+> token（无全量历史重发）、每跳可机械校验、绕开 DeepSeek "挂工具就
+> 不能 output_type" 的端点限制。M9.2/M9.3 的消歧职责由 TraceStep 的
+> 候选消歧字段 + STEP_INSTRUCTIONS 的注册表/动态分派 playbook 吸收。
+> canary `workspace/canary-di/`（注册表动态分派 + 模块变量暂存）端到端
+> COMPLETE（writes_to→callers_of→reads_of→find_call_sites，TP）。
+> **2026-11-01 追加：trace 路径已过基线门禁（三目标 10/10、0 新 SAFE FP，
+> GATE: PASS），旧 investigator 路径同日退役删除（DECISIONS.md D19）。**
 
 背景：joern 前端对反射、动态分派、部分语言（C# 嵌套调用、JS require）
 支持差。M3 已证明 agent 能从断点手动接力（js-sqli-02 / cs-cmdi-02 /
@@ -70,27 +87,50 @@ cs-path-traversal-01），但那是临场发挥；本里程碑把它做成结构
   三级 kind 排序——同一输入可能选出不同 sink 节点。抽公共 prelude。
   验收：4 target 确定性流水线输出（chains/taint JSONL）与合并前 diff
   为空，漂移消除。
+  **→ 2026-11-01 落地为 M9.0-lite**：joern `--script` 的 replpp 不支持
+  ammonite `import $file`（实测报 Not Found Error），prelude 抽取不可行；
+  改为定向对齐——`extract_chain_snippets.sc` 的 sink 匹配块换成
+  backward_from_sinks 的 ±3 窗口 + 三级 kind 排序，新 `trace_step.sc`
+  复制公共块并标 `TODO(M9.0)` 去重。漂移消除由门禁的 snippet hash 兜底。
 - **M9.1 断点结构化输出**（~0.5d）：`backward_from_sinks.sc` 的
   `CHAINS_JSON` 每条链附 `dead_end` 对象（最后到达的方法 + 其体内未解析
   的调用表达式 + receiver 名/类型）；`pipeline.py` 的 InvestigationBrief
   带上断点现场，agent 不再重新推导断点位置。
+  **→ 2026-11-01 完成**（无链 sink 附 `dead_end{method,file,line,
+  unresolved_calls[]}`；`pipeline.get_dead_ends()`；tracer 首轮信封直接
+  带断点现场）。
 - **M9.2 候选生成 + LLM 消歧**（~1d）：`joern_query` 新模板
   `find_call_sites(name)`——name-based 全图候选调用点（过度近似，即当年
   backlog 里否决的 name-based fallback，改为给 LLM 当候选生成器而非引擎
   判定器）；investigator prompt 新增消歧步骤：读 receiver 类型 / import
   绑定 / DI 注册处，选出正确接续边。
+  **→ 2026-11-01 完成，形态变更**：由 `trace_step.sc` 的封闭指令菜单
+  （callers_of/writes_to/reads_of/find_call_sites/trace_back/
+  methods_in_file/read_file/search_code）承担候选生成；消歧在
+  TraceStep 结构里（每轮填表选择上轮候选或给新指令）。
+  `callers_of` 无结果时自动回退到 identifier 引用点（注册表值函数
+  可解析——canary 实证的关键一跳）。
 - **M9.3 反射/DI 专项 playbook**（~0.5d，纯 prompt）：DI 容器（链死在接口
   方法 → 搜实现类 → 读注册处确认接线 → 从实现继续）；反射（
   `Method.invoke` / `Class.forName` / `getattr` / `Activator.CreateInstance`
   ——追名字表达式，不追调用图）；JS/Python 动态分派（`obj[name]()`、
   回调注册、emitter）同法。
+  **→ 2026-11-01 完成**：吸收进 `trace_prompts.py` STEP_INSTRUCTIONS
+  的注册表/动态分派 playbook（callers_of 空但函数明显被用 → 值注册，
+  find_call_sites/search_code 找注册点，reads_of 注册表对象追到派发点）。
 - **M9.4 接续边 provenance + 校验**（~0.5d）：chain 输出每跳标
   `engine | llm_inferred`（D7 LOW_CONFIDENCE 思路的结构化）；`report.py`
   校验层加规则：每个 llm_inferred 跳必须引用 justify 它的调用点行号
   （磁盘可解析 + 标识符出现在所引行内），否则降级。**这是防幻觉底线，
   没有它续链机制不上线。**
-- 验收：4 target 全量回归 recall 不降、0 新 SAFE FP；在 workspace/ 下造
+  **→ 2026-11-01 完成**：Hop.provenance 两态；llm_inferred 跳强制
+  `justify_ref: "file:start-end"` 形状校验（schema 层），入链前
+  `_ref_resolves` 预检 + `report.validate_finding` 终检，失败降
+  CONFIRMED→LIKELY。另有 DEAD guardrail（未试过 find_call_sites/
+  search_code 拒绝 DEAD 判定）与无进展检测（同一指令 3 次 → DEAD）。
+- 验收：target 全量回归 recall 不降、0 新 SAFE FP；在 workspace/ 下造
   一个反射/DI 驱动的 canary 场景（不动 targets）验证续链端到端打通。
+  **→ 2026-11-01 达成**（三 web 目标 GATE: PASS；canary-di 端到端 TP）。
 
 ## M10 — Semgrep 规则自进化（⏸ 推后，Phase 2）
 
@@ -109,12 +149,12 @@ cs-path-traversal-01），但那是临场发挥；本里程碑把它做成结构
   `propose_sink(...)`（→ `workspace/agent-cache/<target>/sink_proposals.
   jsonl`）；"可疑沉默"检测（forward slice 有 DB/进程/文件操作但 0 sink）。
 - **M10.3 沙盒晋升**（~1d）：候选永远先进 `workspace/rule-candidates/`。
-  三关：① `semgrep --validate` + 动机代码必须命中；② 全 4 target 过
+  三关：① `semgrep --validate` + 动机代码必须命中；② 全 3 个 web 目标过
   `--compare` 门禁（无新 SAFE FP、recall 不降）；③ 噪声统计（每条候选规则
   维护 hits/confirmed/vetoed，连续全 veto 进隔离区）。experimental 规则的
   finding 置信度降一档，跑稳晋升 stable。
 - 验收：在 workspace/ 造一个使用 KB 外库的场景，走完"信号 → 提议 → 候选
-  → 门禁 → 入库"闭环，且 4 target 回归全绿。
+  → 门禁 → 入库"闭环，且 3 个 web 目标回归全绿。
 
 ## M11 — 知识库沉淀 + guard 前置（成本）
 
@@ -135,7 +175,7 @@ cs-path-traversal-01），但那是临场发挥；本里程碑把它做成结构
   （reason code 对齐 `why-not-agent-memory.md` §2 的 FP 来源表），
   postmortem 先机械归因再调 LLM。
 - **M12.2 `run_improve.py` 闭环**（~1.5d）：批量跑 → 归因 → postmortem
-  agent 提**一个**变更（变异空间 = 红线 §9.3 允许的 prompt/工具返回格式/
+  agent 提**一个**变更（变异空间 = 红线允许的 prompt/工具返回格式/
   预算）→ 应用 → 受影响 target 重跑 → 门禁 → 保留或回滚。prompt 全进
   git，每次变异记 mutation → score delta。
 - **M12.3 变更 lint**（~0.5d）：改进循环产出的 diff 禁止出现 target 特定
@@ -192,7 +232,7 @@ cs-path-traversal-01），但那是临场发挥；本里程碑把它做成结构
   （没有 canary 护栏的改进循环会过拟合，不如不做），两者都以 M14.3 的
   失败归因为前提。推后是顺序安排，不是不做。
 
-## 未排期（自 `docs/AGENT_MVP_PLAN.md` §10 并入，2026-09-23）
+## 未排期（原 MVP 规格遗留项并入，2026-09-23）
 
 - 生产无 ground truth 运营：置信度分级 + 人工分诊反馈回流 + canary 注入
   测召回；确认的野外漏洞镜像回 benchmark（targets 维护流程见 AGENTS.md）。

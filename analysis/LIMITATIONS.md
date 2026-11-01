@@ -6,7 +6,9 @@ DFG confirmation) across all four targets. Raw outputs: `/tmp/taint_{py,java,js,
 
 Scope (updated 2026-09-23): §§1–3 are the factual engine/pipeline record —
 engine-side work was dropped 2026-09-10 in favor of the LLM/agent layer,
-which has since been built (M0–M8, `docs/AGENT_MVP_PLAN.md`). The live backlog
+which has since been built (M0–M8; the MVP spec/handoff docs were retired
+with the investigator path on 2026-11-01 — see DECISIONS.md D19 — and live
+on in git history). The live backlog
 is §4 (agent/LLM-layer limitations); the post-MVP roadmap (M9+) lives in
 `plan.md`.
 
@@ -100,14 +102,16 @@ documented here as factual engine limitations, not planned work.
 
 ## 4. Agent/LLM-layer limitations (live backlog)
 
-With the agent loop in place (M0–M8, `docs/AGENT_MVP_PLAN.md`), the open
-weaknesses now live in the judgment/agent layer, not the engine. Evidence
-for each item: PROGRESS.md (M0–M8 entries) and `agent/HANDOFF.md`.
+With the agent loop in place (M0–M8; spec/handoff retired 2026-11-01, D19),
+the open weaknesses now live in the judgment/agent layer, not the engine.
+Evidence for each item: PROGRESS.md (M0–M8 entries) and the retired
+`agent/HANDOFF.md` (git history).
 
 - **Non-HTTP targets are generated but not yet pipeline-wired (D17,
-  2026-10-31).** The four securities-industry targets (`java-fix-gateway`,
-  `csharp-fix-gateway`, `python-clearing-worker`,
-  `perl-clearing-worker`) carry full ground truth and their entrypoints
+  2026-10-31).** The securities-industry targets (`java-fix-gateway`,
+  `python-clearing-worker`, `perl-clearing-worker` — the C# mirror
+  `csharp-fix-gateway` was removed 2026-11-01 with csharp-aspnet) carry
+  full ground truth and their entrypoints
   are extractable by `repo_map.py` (registry-shaped dispatch,
   `kind: message|command|file`), but the rest of the pipeline is still
   HTTP-shaped: (a) `analysis/joern/extract_entrypoint_snippets.sc` only
@@ -140,14 +144,29 @@ for each item: PROGRESS.md (M0–M8 entries) and `agent/HANDOFF.md`.
 - **Verifier asymmetry.** Adversarial review (attacker/defender) only runs
   on vulnerable verdicts — a not-vulnerable first pass gets no second
   look, so FNs have no safety net. The verifier also multiplies token
-  spend roughly 2–3× (M4 regression numbers).
+  spend roughly 2–3× (M4 regression numbers). *Update 2026-11-01 (M9
+  tracer):* the multi-chain FN class this produced is fixed — the first
+  full tracer run showed the defender vetoing a vulnerable verdict by
+  pointing at a sanitizer on a DIFFERENT chain reaching the same sink
+  (java-path-traversal-01: allow-list on /download_safe vetoed the open
+  /download chain; py-sqli-01/02 likewise via the int-coerced route). The
+  verdict envelope now lists every engine chain with a judge-each-chain
+  rule, and a vulnerable verdict carries `exploitable_chain` (index) so
+  the finding the verifier reviews is anchored to the exploitable chain.
+  The deeper asymmetry (negative verdicts unreviewed) remains open.
 - **Cost and budget truncation.** The B-class worker runs ~2M+ tokens per
   target; WORKER_MAX_TOOL_CALLS=15 and per-investigation timeouts truncate
   deep investigations and force LIKELY-with-gaps submissions. This is the
   main precision ceiling as targets scale up. *Update 2026-10-04 (D16):*
   cost is now measurable per run (`--max-token-delta`, and the funnel
   numbers M14.3 will collect), but nothing yet *reduces* it — that is
-  M14.2.
+  M14.2. *Update 2026-11-01 (M9 tracer):* the **A-class** path is rebuilt
+  as a state machine (`tracer.py`): the LLM fills one `TraceStep` per round
+  (no tool calls, no full-history resend), which cuts A-class token spend
+  by roughly an order of magnitude vs the investigator (single-sink
+  measurements: 7.3k tokens for a clean chain, 27.6k for a 4-directive
+  canary continuation, vs 0.6–1.0M per target before). The B-class worker
+  cost is untouched.
 - **Hardcoded coverage assumptions.** Python entrypoint detection assumes
   a `(routes|api)/*.py` layout (widened for the enterprise pilot, D12);
   the planner's trait→class mappings are framework-specific. New
@@ -171,6 +190,20 @@ for each item: PROGRESS.md (M0–M8 entries) and `agent/HANDOFF.md`.
   (D16):* the gate used to fail unconditionally on this target (no judge
   baseline, since it was frozen `--skip-llm`); it now reports SKIP, which
   is honest — the target is measured by nothing until the re-pin.
+- **csharp-aspnet CPG cannot be rebuilt on this machine (2026-11-01).**
+  `csharpsrc2cpg`'s `dotnetastgen-macos` is an x86_64 binary and this
+  arm64 host has no Rosetta, so `joern-parse` on csharp-aspnet silently
+  produces a **0-method empty CPG** (a re-parse on 2026-11-01 destroyed
+  the cached CPG this way; it was restored from `workspace/cpg.bin9`'s
+  project copy). `pipeline.ensure_cpg` rebuilds whenever the CPG is older
+  than the newest target source — any csharp source edit triggers the
+  silent-empty rebuild. *Resolution 2026-11-01 (user decision): both C#
+  targets (`csharp-aspnet`, `csharp-fix-gateway`) were removed from the
+  benchmark — see README/AGENTS.md. The mitigations below only matter if a
+  C# target is ever revived from git history (e.g. after installing
+  Rosetta via `softwareupdate --install-rosetta --agree-to-license`):
+  never pass `force=True` to csharp pipeline stages, keep a known-good CPG
+  copy, and treat any 0-method parse as corruption, not as "no findings".
 
 ## 5. Ideas backlog (engine side)
 

@@ -1,7 +1,7 @@
-"""Data contracts for the SAST agent (AGENT_MVP_PLAN.md §4 + §6A 信号层).
+"""Data contracts for the SAST agent.
 
 Tools return facts shaped by these models; the verdict logic lives in the
-investigator/verifier (M2+), never in the tools themselves.
+tracer / worker / verifier agents, never in the tools themselves.
 """
 
 from enum import Enum
@@ -136,7 +136,7 @@ class BFinding(BaseModel):
 
 
 class InvestigationBrief(BaseModel):
-    """Per-sink screening result handed to the investigator (§6A)."""
+    """Per-sink screening result handed to the tracer."""
 
     sink: Sink
     semgrep: dict = Field(default_factory=dict)  # raw semgrep metadata (cwe, matched line)

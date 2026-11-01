@@ -8,7 +8,7 @@
 #     "httpx[socks]>=0.27",
 # ]
 # ///
-"""Category-B planner CLI (AGENT_MVP_PLAN.md §7A, milestone M6).
+"""Category-B planner CLI.
 
 Runs the planner agent over each target: it reads the repo-map route digest
 and submits a hypothesis queue (routes that look like they are MISSING a

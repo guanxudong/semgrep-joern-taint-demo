@@ -21,7 +21,6 @@ to benchmark an LLM + Semgrep + Joern SAST pipeline.
 - `targets/java-spring/` — Spring Boot style (source only)
 - `targets/js-ts-express/` — Express, mixed .js/.ts (source only)
 - `targets/python-flask/` — Flask blueprints (source only)
-- `targets/csharp-aspnet/` — ASP.NET Core style (source only)
 - `targets/perl-cgi/` — legacy CGI.pm-style Perl (source only, 2026-09-26):
   one `.pl` script per action under `cgi-bin/` (routes are the script paths
   by filename convention, e.g. `cgi-bin/users/search.pl` →
@@ -31,9 +30,10 @@ to benchmark an LLM + Semgrep + Joern SAST pipeline.
   D10/D15). Not yet registered in the agent pipeline.
 - Non-HTTP securities-industry targets (2026-10-31, DECISIONS.md D17;
   language↔scenario paired by industry reality, NOT one per language):
-  - `targets/java-fix-gateway` / `targets/csharp-fix-gateway` — FIX-style
-    TCP order gateways (registry dispatch on MsgType, custom text
-    protocol; mirror pair, same domain model).
+  - `targets/java-fix-gateway` — FIX-style TCP order gateway (registry
+    dispatch on MsgType, custom text protocol). (Its C# mirror
+    `csharp-fix-gateway` was removed on 2026-11-01 with `csharp-aspnet`:
+    csharpsrc2cpg cannot rebuild a CPG on this arm64 host.)
   - `targets/python-clearing-worker` / `targets/perl-clearing-worker` —
     clearing/reconciliation pipelines consuming execution-report messages
     and settlement file drops (mirror pair; perl keeps its no-engine
@@ -59,14 +59,19 @@ to benchmark an LLM + Semgrep + Joern SAST pipeline.
   recoverable from git history.)
 - `analysis/rules/` — Semgrep sink rules per language (8 category-A classes).
 - `analysis/joern/` — Joern scripts: entrypoint enumeration, sink→entrypoint
-  backward trace (JSONL side output via `CHAINS_JSON`), entrypoint→down
+  backward trace (JSONL side output via `CHAINS_JSON`, plus a `dead_end`
+  record per no-chain sink naming the stall method and its unresolved
+  calls), entrypoint→down
   forward trace, chain source-snippet extraction
   (`extract_chain_snippets.sc`; set `SRC_ROOT` to the parse root),
   entrypoint+forward-reachable source-snippet extraction
   (`extract_entrypoint_snippets.sc`), dataflow taint confirmation
-  (`taint_confirm.sc`), CPG-derived repo map (`repo_map.sc`; prints one JSON
-  object on stdout — joern logs go to stdout too, so pipe through
-  `awk '/^\{$/,/^\}$/'`).
+  (`taint_confirm.sc`), single-directive trace step for the tracer
+  (`trace_step.sc`; set `DIRECTIVE_FILE` to a JSON directive, one JVM per
+  directive; `callers_of` falls back to identifier reference sites so
+  registry-value functions resolve), CPG-derived repo map (`repo_map.sc`;
+  prints one JSON object on stdout — joern logs go to stdout too, so pipe
+  through `awk '/^\{$/,/^\}$/'`).
 - `analysis/LIMITATIONS.md` — known gaps: §§1–3 the factual engine/pipeline
   record (source coverage, dataflow-engine limits, pipeline issues;
   engine-side work dropped 2026-09-10), §4 the live agent/LLM-layer
@@ -111,31 +116,47 @@ to benchmark an LLM + Semgrep + Joern SAST pipeline.
 - `scripts/compare_repo_maps.py` — scores one or more repo-map JSONs
   (tree-sitter or joern schema) against a `ground_truth.json`: route and
   function hit rates plus coverage stats.
-- `agent/` — MVP investigation agent (spec `docs/AGENT_MVP_PLAN.md`,
-  closed M0–M8; handoff `agent/HANDOFF.md`): `sast_agent/` package (config/contracts/pipeline/
-  scrub/tools/investigator/verifier/report/planner/worker), CLI `run_agent.py` (`uv run
-  --offline agent/run_agent.py --target <name|all>`; `all` = batch mode,
-  parallelism 2, reports under `workspace/agent-reports/<date>/`),
-  `run_baseline.py` (M0 baseline freezer; `--compare` = regression gate
-  against `workspace/baseline/baseline.json` (v2: `{version, provenance,
+- `agent/` — investigation agent (post-MVP; the original M0–M8 MVP spec and
+  handoff were retired with the investigator path on 2026-11-01, D19):
+  `sast_agent/` package (config/contracts/pipeline/scrub/tools/report +
+  tracer + verifier + planner/worker), CLIs
+  `run_trace.py` (category A), `run_planner.py` + `run_worker.py`
+  (category B), `run_baseline.py` (baseline freezer; `--compare` = regression
+  gate against `workspace/baseline/baseline.json` (v2: `{version, provenance,
   targets}`), auto-detects A-class `summary.json` vs B-class
   `summary_b.json`; verdicts PASS/SKIP/FAIL where SKIP = "not comparable"
   and never fails unless `--require-baseline`; every FAIL names its cause
   — MODEL_DRIFT / CODE_CHANGED / SNIPPET_CHANGED / ENGINE_CHANGED /
   JUDGE_CHANGED, else REAL_REGRESSION — and optional dimensions
   `--max-token-delta PCT` (vs the previous same-shape batch),
-  `--min-confirmed-rate PCT`, `--forbid-leak`), `run_planner.py` (M6
-  category-B planner: hypothesis queue per target to
-  `workspace/agent-cache/<target>/hypotheses.jsonl` + post-run ground-truth
-  route-coverage check; M8: also emits a per-class taxonomy coverage
-  checklist to `taxonomy_checklist.json`, rendered into `report_b.md`'s
-  audit section), `run_worker.py` (M7 category-B worker: consumes
-  the hypothesis queue, absence-comparison investigation + adversarial
-  review, reports under `workspace/agent-reports/<date>-m7/<target>/`),
-  smoke scripts
+  `--min-confirmed-rate PCT`, `--forbid-leak`), smoke scripts
   (`smoke_tools.py`, `smoke_verifier.py`, `smoke_m8.py`). Same DeepSeek env
   as the LLM judges. Agent tools must never read `ground_truth.json` /
   `GROUND_TRUTH.md` (hard-refused) nor write under `targets/`.
+  - **Tracer path (category A, state-machine design)**: `trace_schema.py`
+    (Hop/Candidate/TraceDirective/TraceStep/TraceState — the LLM fills one
+    `TraceStep` per round via `PromptedOutput`, no tools, directives from a
+    closed enum menu), `trace_engine.py` (executes directives: joern ones
+    via `trace_step.sc`, `read_file`/`search_code` delegate to `SastTools`
+    so the red lines + scrubber still apply), `trace_prompts.py` (step/
+    verdict instructions), `tracer.py` (`trace_sink` loop: envelope = chain
+    dossier + frontier source + candidates + taint facts; guardrails: DEAD
+    refused until find_call_sites/search_code tried, no-progress detector,
+    budget `MAX_TRACE_STEPS_PER_SINK=12`; every `llm_inferred` hop needs a
+    `justify_ref: "file:start-end"` that must resolve to the named
+    identifier or the verdict is downgraded; multi-chain sinks are judged
+    chain-by-chain — the verdict envelope lists every engine chain and a
+    vulnerable verdict carries `exploitable_chain` (1-based index) so the
+    finding/verifier anchors to the exploitable chain, not the
+    seeded-longest one), CLI `run_trace.py`
+    (`uv run --offline agent/run_trace.py --target <name|all|canary-di>
+    [--limit N] [--only-sink X] [--no-verify] [--dry-run]`, reports under
+    `workspace/agent-reports/<date>-trace/`). The canary target
+    `workspace/canary-di/` (registry dynamic dispatch + module-var store,
+    one canary-cmdi-01) exists only to prove hop-by-hop continuation.
+    Passed the baseline gate 2026-11-01 (10/10 on all three web targets,
+    0 new safe FPs); the old free-form investigator path was deleted the
+    same day.
 - `agent/sast_agent/scrub.py` — the **single** ground-truth scrubber
   (red line §9.2, DECISIONS.md D16). `strip_gt_tags()` removes every known
   marker shape; `scrub()` strips then ASSERTS nothing label-shaped survived
@@ -144,15 +165,18 @@ to benchmark an LLM + Semgrep + Joern SAST pipeline.
   `<lang>-<type>-<nn>` id) → audited only. Never reads ground truth: the id
   shape is a hardcoded regex. Wired into `SastTools.read_function` /
   `search_code` / `get_chain_snippets` / `get_forward_slice` (covers
-  investigator, worker, verifier) and both judges' `build_prompt`; both
+  tracer, worker, verifier) and both judges' `build_prompt`; both
   judges also accept `--check-leak` to build every prompt and assert offline
   (no API key). Fixtures for the shapes: `tests/fixtures/leak/` (the
   targets themselves are marker-free since D15 and cannot serve as
   fixtures).
-- `tests/` — no-LLM test suite: `uv run --with pytest pytest tests -q`
-  (scrubber + regression gate, including the gate's self-tests on fabricated
-  summaries). No API key, no joern, no CPG needed. Anything that can be
-  checked without an LLM belongs here rather than in a smoke script.
+- `tests/` — no-LLM test suite: `uv run --with pytest --with pydantic
+  --with "pydantic-ai-slim[openai]>=2.0.0" --with python-dotenv pytest
+  tests -q`
+  (scrubber + regression gate + tracer state machine, including the gate's
+  self-tests on fabricated summaries). No API key, no joern, no CPG needed.
+  Anything that can be checked without an LLM belongs here rather than in a
+  smoke script.
 
 ## Vulnerability taxonomy
 
@@ -179,7 +203,9 @@ When adding/modifying a vulnerability:
 
 ## Testing changes
 
-- **Repo code (always, no LLM):** `uv run --with pytest pytest tests -q`
+- **Repo code (always, no LLM):** `uv run --with pytest --with pydantic
+  --with "pydantic-ai-slim[openai]>=2.0.0" --with python-dotenv pytest
+  tests -q`
   and `python3 agent/run_baseline.py --compare <summary.json>`. A change to
   a prompt, a tool, the scrubber or the gate must keep the suite green;
   `--compare` is the only gate that sees LLM verdicts.
@@ -196,5 +222,9 @@ When adding/modifying a vulnerability:
 - All: `python3 -m json.tool` on each `ground_truth.json`.
 - Parse check: `joern-parse targets/<name> --output /tmp/<name>.cpg.bin` must
   succeed; `semgrep targets/<name>` must run without parse errors —
-  **except `perl-cgi`**, which neither engine supports by design (that is
-  what the target tests).
+  **except the Perl targets** (`perl-cgi`, `perl-clearing-worker`), which
+  neither engine supports by design (that is what the tier-3 degraded mode
+  tests). The C# targets were removed on 2026-11-01 for the opposite reason:
+  `csharpsrc2cpg`'s astgen is x86_64, and on this arm64 Mac without Rosetta
+  joern-parse silently yields a 0-method empty CPG — verify method count,
+  never trust an empty parse (see LIMITATIONS.md §3).
