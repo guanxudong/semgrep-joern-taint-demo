@@ -22,8 +22,7 @@ targets/
 ├── python-flask/       Python + Flask (blueprints)
 ├── perl-cgi/           Legacy CGI.pm-style Perl (no engine support by design)
 ├── java-fix-gateway/   Non-HTTP: FIX-style TCP order gateway (registry dispatch)
-├── python-clearing-worker/  Non-HTTP: clearing/reconciliation message+file worker
-└── perl-clearing-worker/    Non-HTTP: clearing worker mirror (legacy Perl ops)
+└── python-clearing-worker/  Non-HTTP: clearing/reconciliation message+file worker
 ```
 
 (The legacy JSP target `jsp-legacy/` was removed on 2026-09-05, the

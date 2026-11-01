@@ -90,7 +90,7 @@ def simple_name(full_name: str) -> str:
     """CPG method fullName -> bare method name.
 
     'routes/users.py:<module>.search' -> 'search' (python),
-    'com.foo.UserController.search:java.lang.String(...)' -> 'search' (java/csharp).
+    'com.foo.UserController.search:java.lang.String(...)' -> 'search' (java).
     """
     if ":<module>." in full_name:
         return full_name.rsplit(".", 1)[-1]

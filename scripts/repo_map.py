@@ -41,7 +41,6 @@ LANG_BY_EXT = {
     ".ts": "typescript",
     ".tsx": "typescript",
     ".java": "java",
-    ".cs": "csharp",
 }
 
 # Extra extensions listed in the tree but never parsed for symbols.
@@ -594,106 +593,6 @@ def extract_java(tree, src: bytes):
     return imports, symbols, routes
 
 
-CS_HTTP = {
-    "HttpGet": "GET", "HttpPost": "POST", "HttpPut": "PUT",
-    "HttpDelete": "DELETE", "HttpPatch": "PATCH",
-}
-
-
-def extract_csharp(tree, src: bytes):
-    imports, symbols, routes = [], [], []
-
-    def attr_info(attr_list):
-        out = []
-        for attr in attr_list.children:
-            if attr.type != "attribute":
-                continue
-            name_node = attr.child_by_field_name("name")
-            name = node_text(name_node, src).split(".")[-1] if name_node else ""
-            path = None
-            args = next((c for c in attr.children
-                         if c.type == "attribute_argument_list"), None)
-            if args:
-                path = string_arg(args, src)
-            out.append((name, path, attr.start_point[0] + 1))
-        return out
-
-    def visit(node, parent):
-        for child in node.children:
-            if child.type == "using_directive":
-                text = node_text(child, src).strip().rstrip(";")
-                imports.append(text.replace("using", "").strip())
-            elif child.type in ("namespace_declaration",
-                                "file_scoped_namespace_declaration",
-                                "declaration_list"):
-                visit(child, parent)
-            elif child.type in CLASS_TYPES:
-                name_node = child.child_by_field_name("name")
-                cname = node_text(name_node, src) if name_node else "?"
-                kind = "interface" if child.type == "interface_declaration" else "class"
-                symbols.append({
-                    "kind": kind, "name": cname,
-                    "signature": signature(child, src),
-                    "line": child.start_point[0] + 1, "parent": parent,
-                })
-                prefix = ""
-                for c in child.children:
-                    if c.type == "attribute_list":
-                        for aname, apath, _ in attr_info(c):
-                            if aname == "Route" and apath:
-                                prefix = apath
-                body = child.child_by_field_name("body")
-                if body:
-                    visit_methods(body, cname, prefix)
-
-    def visit_methods(body, cname, prefix):
-        for m in body.children:
-            if m.type != "method_declaration":
-                if m.type in CLASS_TYPES:
-                    visit(m, cname)
-                continue
-            name_node = m.child_by_field_name("name")
-            mname = node_text(name_node, src) if name_node else "?"
-            symbols.append({
-                "kind": "method", "name": mname,
-                "signature": signature(m, src),
-                "line": m.start_point[0] + 1, "parent": cname,
-            })
-            http, path, line = None, None, None
-            for c in m.children:
-                if c.type != "attribute_list":
-                    continue
-                for aname, apath, aline in attr_info(c):
-                    if aname in CS_HTTP:
-                        http = CS_HTTP[aname]
-                        if apath is not None:
-                            path, line = apath, aline
-                    elif aname == "Route" and apath is not None:
-                        path, line = apath, aline
-            if http and path is not None:
-                routes.append({
-                    "method": http,
-                    "path": join_route(prefix, path),
-                    "function": mname,
-                    "line": line,
-                })
-
-    visit(tree.root_node, None)
-    for node in iter_nodes(tree.root_node):
-        if node.type != "invocation_expression":
-            continue
-        func = node.child_by_field_name("function")
-        if func is None or func.type != "member_access_expression":
-            continue
-        name_node = func.child_by_field_name("name")
-        reg = node_text(name_node, src) if name_node else ""
-        args = next((c for c in node.children if c.type == "argument_list"), None)
-        route = registration_route(node, reg, args, src)
-        if route:
-            routes.append(route)
-    return imports, symbols, routes
-
-
 # ---------------------------------------------------------------------------
 # Repo walking and import resolution
 # ---------------------------------------------------------------------------
@@ -768,22 +667,6 @@ def resolve_import(specifier: str, from_rel: str, all_paths: set[str],
             if hits:
                 return sorted(hits)[0]
         return None
-    if language == "csharp":
-        parts = specifier.split(".")
-        for i in range(len(parts)):
-            cand = "/".join(parts[i:]) + ".cs"
-            if cand in all_paths:
-                return cand
-            hits = [p for p in all_paths if p.endswith("/" + cand)]
-            if hits:
-                return sorted(hits)[0]
-        # using X.Y.Namespace -> all sources under directory <Namespace>/
-        last = parts[-1]
-        hits = [p for p in all_paths
-                if ("/" + last + "/") in p or p.startswith(last + "/")]
-        if hits:
-            return sorted(hits)[0]
-        return None
     return None
 
 
@@ -819,8 +702,7 @@ def build_map(root: Path) -> dict:
             imports, symbols, routes = extract_java(tree, src)
             extra = {}
         else:
-            imports, symbols, routes = extract_csharp(tree, src)
-            extra = {}
+            raise ValueError(f"unsupported language: {lang}")
         results[f["path"]] = {
             "imports": imports, "symbols": symbols, "routes": routes, **extra,
         }

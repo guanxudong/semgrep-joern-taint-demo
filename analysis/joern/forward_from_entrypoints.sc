@@ -8,12 +8,10 @@ import io.shiftleft.semanticcpg.language._
 val sinkNames = Map(
   "python" -> "^(execute|executemany|system|popen|eval|exec|loads|load|render_template_string|from_string|fromstring|parse|parseString|XMLParser|send_file|open)$",
   "java"   -> "^(executeQuery|executeUpdate|execute|exec|eval|read|readObject|readAllBytes|readString|parse|start|Template|FileInputStream|FileReader|print)$",
-  "js"     -> "^(query|execute|exec|execSync|spawn|spawnSync|eval|Function|readFileSync|readFile|createReadStream|parseXml|unserialize|deserialize|render|compile|send)$",
-  "csharp" -> "^(ExecuteReader|ExecuteNonQuery|ExecuteScalar|Start|CompileAssemblyFromSource|ReadAllText|ReadAllBytes|OpenRead|Create|Load|LoadXml|Deserialize|RunCompile|Compile|Content)$"
+  "js"     -> "^(query|execute|exec|execSync|spawn|spawnSync|eval|Function|readFileSync|readFile|createReadStream|parseXml|unserialize|deserialize|render|compile|send)$"
 )
 
-val lang = if (cpg.file.name(".*\\.cs$").nonEmpty) "csharp"
-           else if (cpg.file.name(".*\\.java$").nonEmpty) "java"
+val lang = if (cpg.file.name(".*\\.java$").nonEmpty) "java"
            else if (cpg.file.name(".*\\.py$").nonEmpty) "python"
            else "js"
 val nameRe = sinkNames(lang)
@@ -29,12 +27,6 @@ val jspEntrypoints: List[(String, String)] =
 
 // ---- entrypoints (same detection as find_entrypoints.sc) ----
 val entrypoints: List[(String, String)] = lang match {
-  case "csharp" =>
-    cpg.method.where(_.annotation.name("(?i).*Http(Get|Post|Put|Delete|Patch).*")).l.map { m =>
-      val base = m.typeDecl.annotation.name("Route").code.headOption.getOrElse("")
-      val sub = m.annotation.name("(?i).*Http.*").code.headOption.getOrElse("")
-      m.fullName -> s"${m.typeDecl.name.headOption.getOrElse("?")} $base $sub"
-    }
   case "java" =>
     cpg.method.where(_.annotation.name(".*(Get|Post|Put|Delete|Patch)Mapping")).l.map { m =>
       val ann = m.annotation.name(".*Mapping").code.headOption.getOrElse("")

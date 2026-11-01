@@ -43,12 +43,10 @@ def methodSource(m: Method): String = {
 val sinkNames = Map(
   "python" -> "^(execute|executemany|system|popen|eval|exec|loads|load|render_template_string|from_string|fromstring|parseString|open)$",
   "java"   -> "^(executeQuery|executeUpdate|execute|exec|eval|readObject|readAllBytes|readString|parse|start|print)$",
-  "js"     -> "^(query|execute|exec|execSync|spawn|eval|Function|readFileSync|readFile|parseXml|unserialize|render|compile|send)$",
-  "csharp" -> "^(ExecuteReader|ExecuteNonQuery|ExecuteScalar|Start|CompileAssemblyFromSource|ReadAllText|ReadAllBytes|OpenRead|Create|Load|LoadXml|Deserialize|RunCompile|Compile|Content)$"
+  "js"     -> "^(query|execute|exec|execSync|spawn|eval|Function|readFileSync|readFile|parseXml|unserialize|render|compile|send)$"
 )
 
-val lang = if (cpg.file.name(".*\\.cs$").nonEmpty) "csharp"
-           else if (cpg.file.name(".*\\.java$").nonEmpty) "java"
+val lang = if (cpg.file.name(".*\\.java$").nonEmpty) "java"
            else if (cpg.file.name(".*\\.py$").nonEmpty) "python"
            else "js"
 val nameRe = sinkNames(lang)
@@ -64,12 +62,6 @@ val jspEntrypoints: Map[String, String] =
 
 // ---- entrypoint method fullNames (same detection as find_entrypoints.sc) ----
 val entrypoints: Map[String, String] = lang match {
-  case "csharp" =>
-    cpg.method.where(_.annotation.name("(?i).*Http(Get|Post|Put|Delete|Patch).*")).l.map { m =>
-      val base = m.typeDecl.annotation.name("Route").code.headOption.getOrElse("")
-      val sub = m.annotation.name("(?i).*Http.*").code.headOption.getOrElse("")
-      m.fullName -> s"${m.typeDecl.name.headOption.getOrElse("?")} $base $sub"
-    }.toMap
   case "java" =>
     (cpg.method.where(_.annotation.name(".*(Get|Post|Put|Delete|Patch)Mapping")).l.map { m =>
       val ann = m.annotation.name(".*Mapping").code.headOption.getOrElse("")
@@ -128,35 +120,6 @@ val ghostCallerPairs: List[(String, Method)] =
 val ghostCallersByName: Map[String, List[Method]] =
   ghostCallerPairs.groupBy(_._1).map { case (k, vs) => k -> vs.map(_._2).distinct }
     .withDefault(_ => Nil)
-
-// ---- C# missing-inner-call fallback (D7, LOW_CONFIDENCE) ----
-// csharpsrc2cpg drops the call node for `_svc.Method(...)` entirely when it
-// is NESTED inside another call (`Ok(_svc.Method())`) — no CALL edge and no
-// call node, so neither .caller nor name-based call traversal can find it.
-// Fallback: a controller method counts as a caller of service method m when
-// its source text contains ".<mname>(" AND its declaring type has a member
-// whose type is m's declaring type. Scoped to lang == "csharp" (DECISIONS
-// D7); edges found this way are LOW_CONFIDENCE and logged to stderr.
-def methodText(m: Method): String = methodSource(m)
-
-val csTextCallerCache = scala.collection.mutable.Map.empty[String, List[Method]]
-def textCallers(m: Method): List[Method] =
-  if (lang != "csharp") Nil
-  else csTextCallerCache.getOrElseUpdate(m.fullName, {
-    val svcType = m.typeDecl.name.headOption.getOrElse("")
-    if (svcType.isEmpty) Nil
-    else {
-      val pat = ("\\." + java.util.regex.Pattern.quote(m.name) + "\\s*\\(").r
-      cpg.method.where(_.file.name("Controllers/.*\\.cs$")).l.filter { cand =>
-        cand.fullName != m.fullName &&
-        pat.findFirstIn(methodText(cand)).nonEmpty &&
-        cand.typeDecl.member.exists(_.typeFullName.split('.').last == svcType)
-      }.map { cand =>
-        System.err.println(s"// D7 LOW_CONFIDENCE edge: ${cand.fullName} -> ${m.fullName}")
-        cand
-      }
-    }
-  })
 
 // ---- sink calls: (call node, optional semgrep metadata) ----
 // Sink matching aligned with backward_from_sinks.sc / taint_confirm.sc
@@ -219,7 +182,7 @@ def backward(sinkCall: io.shiftleft.codepropertygraph.generated.nodes.Call, maxD
     if (entrypoints.contains(cur.fullName)) {
       results ::= path
     } else if (path.size <= maxDepth) {
-      (cur.caller.l ++ ghostCallersByName(cur.fullName) ++ textCallers(cur)).foreach { caller =>
+      (cur.caller.l ++ ghostCallersByName(cur.fullName)).foreach { caller =>
         if (!path.exists(_.fullName == caller.fullName)) queue :+= caller :: path
       }
     }

@@ -2,14 +2,15 @@
 
 Findings from the 2026-07 session that built and validated
 `analysis/joern/taint_confirm.sc` (Semgrep sink -> call-graph backward trace ->
-DFG confirmation) across all four targets. Raw outputs: `/tmp/taint_{py,java,js,cs}.jsonl`.
+DFG confirmation) across the original four-language benchmark (py/java/js/cs;
+the C# side was removed 2026-11-01, D18). Raw outputs: `/tmp/taint_{py,java,js}.jsonl`.
 
-Scope (updated 2026-09-23): §§1–3 are the factual engine/pipeline record —
+Scope (updated 2026-11-01): §§1–3 are the factual engine/pipeline record —
 engine-side work was dropped 2026-09-10 in favor of the LLM/agent layer,
-which has since been built (M0–M8; the MVP spec/handoff docs were retired
-with the investigator path on 2026-11-01 — see DECISIONS.md D19 — and live
-on in git history). The live backlog
-is §4 (agent/LLM-layer limitations); the post-MVP roadmap (M9+) lives in
+which has since been built (the MVP spec/handoff docs and the M0–M8 progress
+log were retired with the investigator path on 2026-11-01 — see DECISIONS.md
+D19 — and live on in git history). The live backlog
+is §4 (agent/LLM-layer limitations); the roadmap lives in
 `plan.md`.
 
 ## 1. Source-coverage gaps (taint sources)
@@ -104,13 +105,13 @@ documented here as factual engine limitations, not planned work.
 
 With the agent loop in place (M0–M8; spec/handoff retired 2026-11-01, D19),
 the open weaknesses now live in the judgment/agent layer, not the engine.
-Evidence for each item: PROGRESS.md (M0–M8 entries) and the retired
-`agent/HANDOFF.md` (git history).
+Evidence for each item: the retired `agent/HANDOFF.md` and the pruned
+PROGRESS.md entries (git history).
 
 - **Non-HTTP targets are generated but not yet pipeline-wired (D17,
   2026-10-31).** The securities-industry targets (`java-fix-gateway`,
-  `python-clearing-worker`, `perl-clearing-worker` — the C# mirror
-  `csharp-fix-gateway` was removed 2026-11-01 with csharp-aspnet) carry
+  `python-clearing-worker` — `csharp-fix-gateway` and
+  `perl-clearing-worker` were removed 2026-11-01) carry
   full ground truth and their entrypoints
   are extractable by `repo_map.py` (registry-shaped dispatch,
   `kind: message|command|file`), but the rest of the pipeline is still
@@ -190,20 +191,14 @@ Evidence for each item: PROGRESS.md (M0–M8 entries) and the retired
   it. The replacement validation field is an open M14.3 question (plan.md)
   — candidates: the engine-backed `java-fix-gateway` (non-HTTP, registry
   dispatch) or a rebuilt layered web pilot.
-- **csharp-aspnet CPG cannot be rebuilt on this machine (2026-11-01).**
+- **C# is out of the benchmark (2026-11-01, user decision).**
   `csharpsrc2cpg`'s `dotnetastgen-macos` is an x86_64 binary and this
-  arm64 host has no Rosetta, so `joern-parse` on csharp-aspnet silently
-  produces a **0-method empty CPG** (a re-parse on 2026-11-01 destroyed
-  the cached CPG this way; it was restored from `workspace/cpg.bin9`'s
-  project copy). `pipeline.ensure_cpg` rebuilds whenever the CPG is older
-  than the newest target source — any csharp source edit triggers the
-  silent-empty rebuild. *Resolution 2026-11-01 (user decision): both C#
-  targets (`csharp-aspnet`, `csharp-fix-gateway`) were removed from the
-  benchmark — see README/AGENTS.md. The mitigations below only matter if a
-  C# target is ever revived from git history (e.g. after installing
-  Rosetta via `softwareupdate --install-rosetta --agree-to-license`):
-  never pass `force=True` to csharp pipeline stages, keep a known-good CPG
-  copy, and treat any 0-method parse as corruption, not as "no findings".
+  arm64 host has no Rosetta, so `joern-parse` on a C# target silently
+  produces a **0-method empty CPG**. Both C# targets (`csharp-aspnet`,
+  `csharp-fix-gateway`) were removed, and the C# branches went out of
+  the joern scripts / repo mapper the same day. If a C# target is ever
+  revived from git history (e.g. after installing Rosetta), treat any
+  0-method parse as corruption, not as "no findings".
 
 ## 5. Ideas backlog (engine side)
 

@@ -25,8 +25,8 @@ drop the `csharp-aspnet` entry from `run_baseline.py`'s TARGETS (the next
 freeze prunes it from `baseline.json`, same mechanism as jsp-legacy).
 Benchmark scope going forward: the three engine-backed web stacks
 (java-spring / js-ts-express / python-flask) plus the engine-backed
-java-fix-gateway, with perl-cgi / perl-clearing-worker kept deliberately
-as the no-engine tier-3 degraded-mode targets. Recoverable from git
+java-fix-gateway, with perl-cgi kept deliberately as the no-engine
+tier-3 degraded-mode target. Recoverable from git
 history (e.g. after `softwareupdate --install-rosetta`).
 
 ### D19. Investigator path retired: the tracer is the only A-class path
@@ -187,10 +187,10 @@ Decisions:
   took); `compare_repo_maps.py --check` and the planner's route coverage
   still assume HTTP-shaped routes (documented in LIMITATIONS.md §4).
 
-Current non-HTTP targets: `java-fix-gateway`, `python-clearing-worker`,
-`perl-clearing-worker` (perl keeps its no-engine tier-3 degraded-mode
-role). 17 vulnerable + 5 safe entries each, same taxonomy as the HTTP
-targets.
+Current non-HTTP targets: `java-fix-gateway` and `python-clearing-worker`
+(`perl-clearing-worker` was removed on 2026-11-01 as redundant; perl-cgi
+remains the no-engine tier-3 case). 17 vulnerable + 5 safe entries each,
+same taxonomy as the HTTP targets.
 
 ## Language coverage (2026-09-14)
 
@@ -257,9 +257,9 @@ history (revisions of this file before 2026-11-01).
   the A-class agent covers store sites at runtime; kept here so it isn't
   re-proposed.
 - **D7. C# name/source-text call-site fallback** — resolved 2026-07
-  (csharp recall 8/10 → 10/10); the dormant C# branches remain in the
-  joern scripts as generic tooling (kept per D18). Moot for benchmarking
-  after D18.
+  (csharp recall 8/10 → 10/10); the C# branches were deleted from the
+  joern scripts on 2026-11-01 with the C# targets (D18), so this is
+  history only.
 - **D8/D9. JSP transpile-to-Java + pipeline wiring** — superseded
   2026-09-05: jsp-legacy and the transpiler were removed; the dormant
   `out.print` rule branch remains in `sinks-java.yml` (inert for the

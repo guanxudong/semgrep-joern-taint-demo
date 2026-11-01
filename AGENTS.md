@@ -34,10 +34,10 @@ to benchmark an LLM + Semgrep + Joern SAST pipeline.
     dispatch on MsgType, custom text protocol). (Its C# mirror
     `csharp-fix-gateway` was removed on 2026-11-01 with `csharp-aspnet`:
     csharpsrc2cpg cannot rebuild a CPG on this arm64 host.)
-  - `targets/python-clearing-worker` / `targets/perl-clearing-worker` —
-    clearing/reconciliation pipelines consuming execution-report messages
-    and settlement file drops (mirror pair; perl keeps its no-engine
-    tier-3 role). Not yet registered in the agent pipeline.
+  - `targets/python-clearing-worker` — clearing/reconciliation pipeline
+    consuming execution-report messages and settlement file drops
+    (its Perl mirror was removed on 2026-11-01 as redundant). Not yet
+    registered in the agent pipeline.
   - In these targets `ground_truth.json`'s `entrypoint.route` carries a
     **trigger descriptor** (`MSG <subject>` / `CMD <command>` /
     `FILE <kind>`) instead of an HTTP route. **Message/file/command
@@ -222,9 +222,9 @@ When adding/modifying a vulnerability:
 - All: `python3 -m json.tool` on each `ground_truth.json`.
 - Parse check: `joern-parse targets/<name> --output /tmp/<name>.cpg.bin` must
   succeed; `semgrep targets/<name>` must run without parse errors —
-  **except the Perl targets** (`perl-cgi`, `perl-clearing-worker`), which
-  neither engine supports by design (that is what the tier-3 degraded mode
-  tests). The C# targets were removed on 2026-11-01 for the opposite reason:
+  **except the Perl target** (`perl-cgi`), which neither engine supports by
+  design (that is what the tier-3 degraded mode tests). The C# targets were
+  removed on 2026-11-01 for the opposite reason:
   `csharpsrc2cpg`'s astgen is x86_64, and on this arm64 Mac without Rosetta
   joern-parse silently yields a 0-method empty CPG — verify method count,
   never trust an empty parse (see LIMITATIONS.md §3).

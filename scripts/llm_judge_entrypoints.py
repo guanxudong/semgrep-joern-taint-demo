@@ -128,7 +128,7 @@ def simple_name(full_name: str) -> str:
     """CPG method fullName -> bare method name.
 
     'routes/users.py:<module>.search' -> 'search' (python),
-    'com.foo.UserController.search:java.lang.String(...)' -> 'search' (java/csharp),
+    'com.foo.UserController.search:java.lang.String(...)' -> 'search' (java),
     'routes/users.js:<global>.<lambda>0' -> '<lambda>0' (js).
     """
     if ":<module>." in full_name:
@@ -235,7 +235,7 @@ def route_specificity(gt_route: str, ep: str) -> int | None:
         return None
     gt_segs = _norm_segs(path)
     cand: list[str] = []
-    # quoted fragments (java/csharp annotation style) ...
+    # quoted fragments (java annotation style) ...
     for frag in re.findall(r'"([^"]*)"', ep):
         cand.extend(_norm_segs(frag))
     # ... or the raw path after the verb ("GET /users/<id>" style)

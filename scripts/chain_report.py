@@ -78,7 +78,7 @@ def build_report(chains_rows: list[dict], taint_rows: list[dict],
         chains = row.get("chains", [])
         if not chains:
             # sink matched in the CPG but no call chain to any entrypoint
-            # (e.g. csharpsrc2cpg dropping CALL edges into Services/)
+            # (frontend dropped CALL edges — see LIMITATIONS.md §§1–2)
             report.append(
                 {
                     "route": "",

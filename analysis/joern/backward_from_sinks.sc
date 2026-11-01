@@ -19,38 +19,16 @@ import io.shiftleft.semanticcpg.language._
 import io.shiftleft.codepropertygraph.generated.nodes.Method
 import java.nio.file.{Files, Paths}
 
-val srcRoot = Paths.get(sys.env.getOrElse("SRC_ROOT", "."))
-
-// read a method's source: prefer a disk slice by line range when it is
-// LONGER than the CPG code property (javasrc2cpg/csharpsrc2cpg may fill
-// `code` with just the signature line). Used by the D7 text fallback.
-def methodSource(m: Method): String = {
-  val cpgCode =
-    if (m.code != null && m.code.nonEmpty && m.code != "<empty>") m.code else ""
-  (m.file.name.headOption, m.lineNumber, m.lineNumberEnd) match {
-    case (Some(f), Some(start), Some(end)) if end > start =>
-      try {
-        val lines = Files.readAllLines(srcRoot.resolve(f))
-        val sliced = lines.subList(math.max(start - 1, 0), math.min(end, lines.size))
-          .toArray.mkString("\n")
-        if (sliced.length > cpgCode.length) sliced else cpgCode
-      } catch { case _: Exception => cpgCode }
-    case _ => cpgCode
-  }
-}
-
 // Sink name table, aligned with analysis/rules/sinks-*.yml (keep in sync with
 // taint_confirm.sc / forward_from_entrypoints.sc). Must also cover constructor
 // sinks (`new Template`, `new FileInputStream`) for name-first matching.
 val sinkNames = Map(
   "python" -> "^(execute|executemany|system|popen|eval|exec|loads|load|render_template_string|from_string|fromstring|parse|parseString|XMLParser|send_file|open)$",
   "java"   -> "^(executeQuery|executeUpdate|execute|exec|eval|read|readObject|readAllBytes|readString|parse|start|Template|FileInputStream|FileReader|print)$",
-  "js"     -> "^(query|execute|exec|execSync|spawn|spawnSync|eval|Function|readFileSync|readFile|createReadStream|parseXml|unserialize|deserialize|render|compile|send)$",
-  "csharp" -> "^(ExecuteReader|ExecuteNonQuery|ExecuteScalar|Start|CompileAssemblyFromSource|ReadAllText|ReadAllBytes|OpenRead|Create|Load|LoadXml|Deserialize|RunCompile|Compile|Content)$"
+  "js"     -> "^(query|execute|exec|execSync|spawn|spawnSync|eval|Function|readFileSync|readFile|createReadStream|parseXml|unserialize|deserialize|render|compile|send)$"
 )
 
-val lang = if (cpg.file.name(".*\\.cs$").nonEmpty) "csharp"
-           else if (cpg.file.name(".*\\.java$").nonEmpty) "java"
+val lang = if (cpg.file.name(".*\\.java$").nonEmpty) "java"
            else if (cpg.file.name(".*\\.py$").nonEmpty) "python"
            else "js"
 val nameRe = sinkNames(lang)
@@ -68,12 +46,6 @@ val jspEntrypoints: Map[String, String] =
 
 // ---- entrypoint method fullNames (same detection as find_entrypoints.sc) ----
 val entrypoints: Map[String, String] = lang match {
-  case "csharp" =>
-    cpg.method.where(_.annotation.name("(?i).*Http(Get|Post|Put|Delete|Patch).*")).l.map { m =>
-      val base = m.typeDecl.annotation.name("Route").code.headOption.getOrElse("")
-      val sub = m.annotation.name("(?i).*Http.*").code.headOption.getOrElse("")
-      m.fullName -> s"${m.typeDecl.name.headOption.getOrElse("?")} $base $sub"
-    }.toMap
   case "java" =>
     (cpg.method.where(_.annotation.name(".*(Get|Post|Put|Delete|Patch)Mapping")).l.map { m =>
       val ann = m.annotation.name(".*Mapping").code.headOption.getOrElse("")
@@ -140,29 +112,6 @@ val ghostCallersByName: Map[String, List[Method]] =
   ghostCallerPairs.groupBy(_._1).map { case (k, vs) => k -> vs.map(_._2).distinct }
     .withDefault(_ => Nil)
 
-// ---- C# missing-inner-call fallback (D7, LOW_CONFIDENCE) — see
-// extract_chain_snippets.sc for the full explanation ----
-def methodText(m: Method): String = methodSource(m)
-
-val csTextCallerCache = scala.collection.mutable.Map.empty[String, List[Method]]
-def textCallers(m: Method): List[Method] =
-  if (lang != "csharp") Nil
-  else csTextCallerCache.getOrElseUpdate(m.fullName, {
-    val svcType = m.typeDecl.name.headOption.getOrElse("")
-    if (svcType.isEmpty) Nil
-    else {
-      val pat = ("\\." + java.util.regex.Pattern.quote(m.name) + "\\s*\\(").r
-      cpg.method.where(_.file.name("Controllers/.*\\.cs$")).l.filter { cand =>
-        cand.fullName != m.fullName &&
-        pat.findFirstIn(methodText(cand)).nonEmpty &&
-        cand.typeDecl.member.exists(_.typeFullName.split('.').last == svcType)
-      }.map { cand =>
-        System.err.println(s"// D7 LOW_CONFIDENCE edge: ${cand.fullName} -> ${m.fullName}")
-        cand
-      }
-    }
-  })
-
 // ---- sink calls: from SINKS_FILE if given, else by name table ----
 // sink-name match: direct call name, or constructor sinks by type name
 // (`<init>` methodFullName / `new X(...)` code). Keep in sync with taint_confirm.sc.
@@ -224,7 +173,7 @@ def backward(sinkCall: io.shiftleft.codepropertygraph.generated.nodes.Call, maxD
     if (entrypoints.contains(cur.fullName)) {
       results ::= path
     } else if (path.size <= maxDepth) {
-      (cur.caller.l ++ ghostCallersByName(cur.fullName) ++ textCallers(cur)).foreach { caller =>
+      (cur.caller.l ++ ghostCallersByName(cur.fullName)).foreach { caller =>
         if (!path.exists(_.fullName == caller.fullName)) queue :+= caller :: path
       }
     }

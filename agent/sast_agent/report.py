@@ -182,7 +182,7 @@ def route_specificity(gt_route: str, ep: str) -> int | None:
         return None
     gt_segs = _norm_segs(path)
     cand: list[str] = []
-    # quoted fragments (java/csharp annotation style) ...
+    # quoted fragments (java annotation style) ...
     for frag in re.findall(r'"([^"]*)"', ep):
         cand.extend(_norm_segs(frag))
     # ... or the raw path after the verb ("GET /users/<id>" style)
@@ -406,11 +406,11 @@ import os
 from pathlib import Path
 
 # file refs are extracted, not full-matched: agents legitimately append
-# prose ("Controllers/X.cs:11-22 (entrypoint X.Parse)") — the checkable
+# prose ("controllers/X.java:11-22 (entrypoint X.parse)") — the checkable
 # part is the file:start-end prefix. Refs without any file:line token
 # (e.g. a CPG method fullName) are uncheckable and skipped, not flagged.
 _REF_RE = re.compile(
-    r"([\w./-]+\.(?:py|js|ts|java|cs|jsp)):(\d+)(?:-(\d+))?")
+    r"([\w./-]+\.(?:py|js|ts|java)):(\d+)(?:-(\d+))?")
 # a "code identifier" token: snake_case / camelCase / CONSTANT — plain
 # English words don't count toward the identifier check
 _IDENT_RE = re.compile(r"\b[A-Za-z_][A-Za-z0-9_]*\b")

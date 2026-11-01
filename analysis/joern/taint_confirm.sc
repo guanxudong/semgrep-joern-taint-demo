@@ -23,12 +23,10 @@ import java.nio.file.{Files, Paths}
 val sinkNames = Map(
   "python" -> "^(execute|executemany|system|popen|eval|exec|loads|load|render_template_string|from_string|fromstring|parse|parseString|XMLParser|send_file|open)$",
   "java"   -> "^(executeQuery|executeUpdate|execute|exec|eval|read|readObject|readAllBytes|readString|parse|start|Template|FileInputStream|FileReader|print)$",
-  "js"     -> "^(query|execute|exec|execSync|spawn|spawnSync|eval|Function|readFileSync|readFile|createReadStream|parseXml|unserialize|deserialize|render|compile|send)$",
-  "csharp" -> "^(ExecuteReader|ExecuteNonQuery|ExecuteScalar|Start|CompileAssemblyFromSource|ReadAllText|ReadAllBytes|OpenRead|Create|Load|LoadXml|Deserialize|RunCompile|Compile|Content)$"
+  "js"     -> "^(query|execute|exec|execSync|spawn|spawnSync|eval|Function|readFileSync|readFile|createReadStream|parseXml|unserialize|deserialize|render|compile|send)$"
 )
 
-val lang = if (cpg.file.name(".*\\.cs$").nonEmpty) "csharp"
-           else if (cpg.file.name(".*\\.java$").nonEmpty) "java"
+val lang = if (cpg.file.name(".*\\.java$").nonEmpty) "java"
            else if (cpg.file.name(".*\\.py$").nonEmpty) "python"
            else "js"
 val nameRe = sinkNames(lang)
@@ -38,20 +36,15 @@ val nameRe = sinkNames(lang)
 //   python: Flask `request.*` (also catches other frameworks' `request` objects)
 //   js    : Express `req.*`; Koa `ctx.*` / `ctx.request.*`; Fastify/Hapi `request.*`
 //   java  : HttpServletRequest accessors
-//   csharp: HttpRequest accessors
 val callSourceRe = lang match {
   case "python" => ".*request\\.(args|form|values|cookies|headers|json|data|get_data|get_json|view_args).*"
   case "js"     => ".*((req|ctx|request)\\.(query|body|params|headers|cookies|payload)|ctx\\.request\\.(body|query|headers)|req\\.param\\().*"
-  case "java"   => ".*(getParameter|getHeader|getInputStream|getReader|getQueryString|getPathInfo|getCookies).*"
-  case _        => ".*Request\\.(Query|Form|Body|Headers|RouteData|Cookies).*"
+  case _        => ".*(getParameter|getHeader|getInputStream|getReader|getQueryString|getPathInfo|getCookies).*"
 }
 // Parameter-based sources: handlers that receive input as parameters instead
 // of via accessor calls.
 //   java   : Spring (@RequestParam/@RequestBody/@PathVariable/...) and JAX-RS
 //            (@PathParam/@QueryParam/...) annotated parameters.
-//   csharp : controller action params (csharpsrc2cpg models attributes poorly),
-//            plus params of any [HttpGet]/...-annotated action (minimal APIs,
-//            controllers outside a `Controllers/` dir).
 //   python : route placeholders (`/<int:id>` Flask-style, `/{id}` FastAPI-style)
 //            bind input to handler arguments without touching `request.*`.
 //            pysrc2cpg has no ANNOTATION nodes for decorators — the route call
@@ -62,10 +55,6 @@ def sources = lang match {
   case "java" =>
     cpg.call.code(callSourceRe).cast[nodes.CfgNode] ++
     cpg.parameter.where(_.annotation.name(".*(RequestParam|RequestBody|RequestHeader|PathVariable|ModelAttribute|RequestPart|PathParam|QueryParam|FormParam|HeaderParam|BeanParam)")).cast[nodes.CfgNode]
-  case "csharp" =>
-    cpg.call.code(callSourceRe).cast[nodes.CfgNode] ++
-    cpg.parameter.where(_.file.name(".*Controllers/.*")).cast[nodes.CfgNode] ++
-    cpg.method.where(_.annotation.name("(?i).*Http(Get|Post|Put|Delete|Patch).*")).parameter.cast[nodes.CfgNode]
   case "python" =>
     val placeholderCalls = cpg.call.name("^(route|get|post|put|delete|patch|api_route)$")
       .where(_.argument.code(".*(<[^>]+>|[{][^{}]+[}]).*")).l

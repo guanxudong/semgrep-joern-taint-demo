@@ -41,7 +41,7 @@
 三个脚本前 2/3 几乎是同构的，只有最后一步不同：
 
 ```
-① 语言嗅探：看 CPG 里有没有 .cs / .java / .py 文件，确定 lang
+① 语言嗅探：看 CPG 里有没有 .java / .py 文件，确定 lang
 ② sink 名称表：每个语言一份正则（execute|eval|open|...），与 semgrep 规则对齐
 ③ entrypoints 字典：枚举 HTTP 入口方法（python：routes|api/*.py 的顶层方法）
 ④ SINKS_FILE → CPG 调用节点：按 file+line 在 ±N 行窗口内找候选，
@@ -109,11 +109,10 @@ def backward(sinkCall: Call, maxDepth: Int = 8): List[List[Method]] = {
 它确实调用了 `query_unsafe` 也拼了 SQL，但没有 HTTP 入口可达——pipeline 层面它就是
 "不可达的嫌疑"，不会进入后续环节。这就是调用链回溯过滤掉的那类噪音。
 
-> 脚本里还有两段 python 用不上的补偿逻辑，知道存在即可：JS 的 ghost-callee 修复
+> 脚本里还有一段 python 用不上的补偿逻辑，知道存在即可：JS 的 ghost-callee 修复
 > （jssrc2cpg 解析不了 require 导入的跨文件调用边，脚本按"导入路径 + 调用名"手动补边，
-> 对应 DECISIONS.md D5）和 C# 的文本 fallback（csharpsrc2cpg 丢失嵌套调用节点，
-> 按方法源码里出现 `.方法名(` 补边，D7）。它们揭示了一个事实：**每个语言前端都有
-> 建边缺陷，图查询的可靠性取决于前端的成熟度**。
+> 对应 DECISIONS.md D5）。它揭示了一个事实：**语言前端可能有建边缺陷，图查询的
+> 可靠性取决于前端的成熟度**。
 
 ## 3. `taint_confirm.sc`：污点源 → sink 的数据流
 
@@ -136,7 +135,7 @@ cpg.call.code(callSourceRe).cast[CfgNode] ++ routeHandlers.flatMap(_.parameter.l
 
 ② 是一段"绕缺陷"的逻辑，值得细读：Flask 的 `@bp.route("/users/<int:user_id>")` 会把
 URL 里的参数绑到处理器函数参数上，但 **pysrc2cpg 不给装饰器建注解（ANNOTATION）节点**，
-没法像 Java/C# 那样"找带某注解的参数"。替代办法：找到含占位符的 route 调用（装饰器
+没法像 Java 那样"找带某注解的参数"。替代办法：找到含占位符的 route 调用（装饰器
 在 CPG 里就是个普通调用节点），取它**下方行号最近的方法**，把它的参数当污点源。
 本靶子上识别出 3 处（实测输出）：
 
@@ -312,11 +311,11 @@ cpg.method.nameExact("data/db.py:<module>.query_unsafe").caller.l   // → 空�
 
 ## 7. 想再深入
 
-- `analysis/joern/find_entrypoints.sc`：entrypoints 字典的独立版，四种语言的入口识别
-  写法都在里面（Java/C# 靠注解节点，JS 靠 route 调用 + METHOD_REF）。
+- `analysis/joern/find_entrypoints.sc`：entrypoints 字典的独立版，各语言的入口识别
+  写法都在里面（Java 靠注解节点，JS 靠 route 调用 + METHOD_REF）。
 - `analysis/joern/forward_from_entrypoints.sc` 与 `extract_entrypoint_snippets.sc`：
   方向相反（入口向下），是 category B 流程的零件。
 - joern 官方查询文档：`reachableByFlows`、`.caller`、`.ast` 等的完整语义见
   https://docs.joern.io/traversal-basics/ 。
 - 前端能力的边界决定了图的质量：`analysis/LIMITATIONS.md` §1–2 记录了本仓库实测到的
-  各语言前端缺陷（JS ghost callee、C# 丢嵌套调用等）。
+  语言前端缺陷（JS ghost callee 等）。

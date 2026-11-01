@@ -311,9 +311,10 @@ def screen(target: str, force: bool = False) -> list[InvestigationBrief]:
             gap = Gap.GAP_FLOW_DEAD
         else:
             gap = Gap.OK
-        # TODO(M3): GAP_MISSING_STORE — chain/taint exist but a field/module
-        # variable write site is missing from the chain. Needs chain/write-site
-        # analysis; never emitted in M1.
+        # GAP_MISSING_STORE (chain/taint exist but a field/module-variable
+        # write site is missing from the chain) has no engine-side enum
+        # value: per D6 the tracer follows store sites at runtime via the
+        # `writes_to` directive, so the screening layer never emits it.
         briefs.append(InvestigationBrief(
             sink=sink,
             semgrep=raw_meta.get(sink.id, {}),

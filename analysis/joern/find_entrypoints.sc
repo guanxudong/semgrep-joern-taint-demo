@@ -3,11 +3,10 @@
 // Usage:
 //   joern --script analysis/joern/find_entrypoints.sc <cpg.bin> [> entrypoints.jsonl]
 //
-// Works for all four targets:
+// Works for all targets:
 //   python-flask  : methods defined in routes|api/*.py (route path is best-effort)
 //   java-spring   : methods with @GetMapping/@PostMapping/... annotations
 //   js-ts-express : router.get/post/... call sites; handler is the <lambda>N via METHOD_REF
-//   csharp-aspnet : methods with [HttpGet]/[HttpPost]/... attributes
 import io.shiftleft.semanticcpg.language._
 
 def esc(s: String): String = s.replace("\\", "\\\\").replace("\"", "\\\"")
@@ -16,22 +15,11 @@ def routeFromAttr(code: String): String =
   code.replaceAll("(?i)^@?(route|http(get|post|put|delete|patch)|[a-z]+mapping)\\(", "")
       .replaceAll("\\)$", "").replaceAll("\"", "")
 
-val lang = if (cpg.file.name(".*\\.cs$").nonEmpty) "csharp"
-           else if (cpg.file.name(".*\\.java$").nonEmpty) "java"
+val lang = if (cpg.file.name(".*\\.java$").nonEmpty) "java"
            else if (cpg.file.name(".*\\.py$").nonEmpty) "python"
            else "js"
 
 lang match {
-  case "csharp" =>
-    cpg.method.where(_.annotation.name("(?i).*Http(Get|Post|Put|Delete|Patch).*")).l.foreach { m =>
-      val cls = m.typeDecl.name.headOption.getOrElse("?")
-      val base = m.typeDecl.annotation.name("Route").code.headOption.map(routeFromAttr).getOrElse("")
-      val sub = m.annotation.name("(?i).*Http.*").code.headOption.map(routeFromAttr).getOrElse("")
-      val verb = m.annotation.name("(?i).*Http(Get|Post|Put|Delete|Patch).*").name.headOption
-        .getOrElse("Http").replace("Http", "").toUpperCase
-      println(s"""{"lang":"csharp","route":"$verb /${esc(base)}/${esc(sub)}","method":"${esc(m.fullName)}","file":"${esc(m.file.name.headOption.getOrElse("?"))}","line":${m.lineNumber.getOrElse(-1)}}""")
-    }
-
   case "java" =>
     cpg.method.where(_.annotation.name(".*(Get|Post|Put|Delete|Patch)Mapping")).l.foreach { m =>
       val base = m.typeDecl.annotation.name("RequestMapping").code.headOption.map(routeFromAttr).getOrElse("")

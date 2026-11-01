@@ -15,7 +15,6 @@
 // review of the non-sink (category-B) vulnerability classes.
 //
 // Entrypoint detection is the SAME per-language logic as find_entrypoints.sc:
-//   csharp: [HttpGet]/[HttpPost]/... attributes       route: "VERB /base/sub"
 //   java:   @GetMapping/@PostMapping/... annotations  route: "VERB base/sub"
 //   python: methods in routes|api/*.py                route: raw annotation code (best-effort)
 //   js/ts:  router.get/post/... calls in routes/.*    route: "VERB /path"
@@ -48,8 +47,7 @@ def methodSource(m: Method): String = {
   }
 }
 
-val lang = if (cpg.file.name(".*\\.cs$").nonEmpty) "csharp"
-           else if (cpg.file.name(".*\\.java$").nonEmpty) "java"
+val lang = if (cpg.file.name(".*\\.java$").nonEmpty) "java"
            else if (cpg.file.name(".*\\.py$").nonEmpty) "python"
            else "js"
 
@@ -60,14 +58,6 @@ def routeFromAttr(code: String): String =
 
 // ---- entrypoints: (method fullName, route label) — same detection as find_entrypoints.sc ----
 val entrypoints: List[(String, String)] = lang match {
-  case "csharp" =>
-    cpg.method.where(_.annotation.name("(?i).*Http(Get|Post|Put|Delete|Patch).*")).l.map { m =>
-      val base = m.typeDecl.annotation.name("Route").code.headOption.map(routeFromAttr).getOrElse("")
-      val sub = m.annotation.name("(?i).*Http.*").code.headOption.map(routeFromAttr).getOrElse("")
-      val verb = m.annotation.name("(?i).*Http(Get|Post|Put|Delete|Patch).*").name.headOption
-        .getOrElse("Http").replace("Http", "").toUpperCase
-      m.fullName -> s"$verb /$base/$sub"
-    }
   case "java" =>
     cpg.method.where(_.annotation.name(".*(Get|Post|Put|Delete|Patch)Mapping")).l.map { m =>
       val base = m.typeDecl.annotation.name("RequestMapping").code.headOption.map(routeFromAttr).getOrElse("")
@@ -102,29 +92,6 @@ val entrypoints: List[(String, String)] = lang match {
 }
 
 // ---- forward BFS over the call graph (caller -> callee, internal only) ----
-// C# missing-inner-call fallback (D7, forward direction): csharpsrc2cpg
-// drops the call node for `_svc.Method(...)` nested inside another call
-// (`Ok(_svc.Transfer(...))`), so the callee is invisible to the call graph.
-// A service/data-layer method counts as a callee of controller method m
-// when m's source contains ".<name>(" AND m's declaring type holds a field
-// of the callee's declaring type. LOW_CONFIDENCE, logged to stderr.
-def textCallees(m: Method): List[Method] =
-  if (lang != "csharp") Nil
-  else {
-    val text = methodSource(m)
-    val memberTypes = m.typeDecl.member.map(_.typeFullName.split('.').last).toSet
-    if (memberTypes.isEmpty || text.isEmpty) Nil
-    else cpg.method.where(_.file.name("(Services|Data)/.*\\.cs$")).l.filter { svc =>
-      svc.fullName != m.fullName &&
-      svc.typeDecl.name.headOption.exists(memberTypes.contains) &&
-      ("\\." + java.util.regex.Pattern.quote(svc.name) + "\\s*\\(").r
-        .findFirstIn(text).nonEmpty
-    }.map { svc =>
-      System.err.println(s"// D7-fwd LOW_CONFIDENCE edge: ${m.fullName} -> ${svc.fullName}")
-      svc
-    }
-  }
-
 def forwardCallees(root: Method, maxDepth: Int = 5, maxMethods: Int = 15): List[Method] = {
   var visited = Set(root.fullName)
   var ordered = List.empty[Method]
@@ -133,7 +100,7 @@ def forwardCallees(root: Method, maxDepth: Int = 5, maxMethods: Int = 15): List[
     val (cur, depth) = queue.head; queue = queue.tail
     ordered :+= cur
     if (depth < maxDepth) {
-      (cur.call.callee.filterNot(_.isExternal).l ++ textCallees(cur)).foreach { callee =>
+      cur.call.callee.filterNot(_.isExternal).l.foreach { callee =>
         if (!visited.contains(callee.fullName) && ordered.size + queue.size < maxMethods) {
           visited += callee.fullName
           queue :+= callee -> (depth + 1)

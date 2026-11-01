@@ -23,12 +23,12 @@
 //   methods_in_file(file)   {"method","name","file","line","line_end"}
 //   trace_back(methodFullName) {"route","entrypoint","path":[fullName,...]}
 //                             — backward BFS from an arbitrary method,
-//                               same entrypoint table + D5/D7 repairs as
+//                               same entrypoint table + D5 repair as
 //                               backward_from_sinks.sc
 //
-// TODO(M9.0): entrypoint detection, the JS ghost-callee repair (D5), the
-// C# source-text caller fallback (D7) and esc/q are copied from
-// backward_from_sinks.sc — commonize into a shared prelude.
+// TODO(M9.0): entrypoint detection, the JS ghost-callee repair (D5) and
+// esc/q are copied from backward_from_sinks.sc — commonize into a shared
+// prelude.
 import io.shiftleft.semanticcpg.language._
 import io.shiftleft.codepropertygraph.generated.nodes
 import io.shiftleft.codepropertygraph.generated.nodes.Method
@@ -56,8 +56,7 @@ val symbol = dstr("symbol")
 val argFile = dstr("file")
 
 // ---- language detection (same as backward_from_sinks.sc) ----
-val lang = if (cpg.file.name(".*\\.cs$").nonEmpty) "csharp"
-           else if (cpg.file.name(".*\\.java$").nonEmpty) "java"
+val lang = if (cpg.file.name(".*\\.java$").nonEmpty) "java"
            else if (cpg.file.name(".*\\.py$").nonEmpty) "python"
            else "js"
 
@@ -72,12 +71,6 @@ val jspEntrypoints: Map[String, String] =
   }.toMap
 
 val entrypoints: Map[String, String] = lang match {
-  case "csharp" =>
-    cpg.method.where(_.annotation.name("(?i).*Http(Get|Post|Put|Delete|Patch).*")).l.map { m =>
-      val base = m.typeDecl.annotation.name("Route").code.headOption.getOrElse("")
-      val sub = m.annotation.name("(?i).*Http.*").code.headOption.getOrElse("")
-      m.fullName -> s"${m.typeDecl.name.headOption.getOrElse("?")} $base $sub"
-    }.toMap
   case "java" =>
     (cpg.method.where(_.annotation.name(".*(Get|Post|Put|Delete|Patch)Mapping")).l.map { m =>
       val ann = m.annotation.name(".*Mapping").code.headOption.getOrElse("")
@@ -137,45 +130,9 @@ val ghostCallersByName: Map[String, List[Method]] =
   ghostCallerPairs.groupBy(_._1).map { case (k, vs) => k -> vs.map(_._2).distinct }
     .withDefault(_ => Nil)
 
-// ---- C# missing-inner-call fallback (D7, LOW_CONFIDENCE, copied) ----
-val srcRoot = Paths.get(sys.env.getOrElse("SRC_ROOT", "."))
-def methodSource(m: Method): String = {
-  val cpgCode =
-    if (m.code != null && m.code.nonEmpty && m.code != "<empty>") m.code else ""
-  (m.file.name.headOption, m.lineNumber, m.lineNumberEnd) match {
-    case (Some(f), Some(start), Some(end)) if end > start =>
-      try {
-        val lines = Files.readAllLines(srcRoot.resolve(f))
-        val sliced = lines.subList(math.max(start - 1, 0), math.min(end, lines.size))
-          .toArray.mkString("\n")
-        if (sliced.length > cpgCode.length) sliced else cpgCode
-      } catch { case _: Exception => cpgCode }
-    case _ => cpgCode
-  }
-}
-
-val csTextCallerCache = scala.collection.mutable.Map.empty[String, List[Method]]
-def textCallers(m: Method): List[Method] =
-  if (lang != "csharp") Nil
-  else csTextCallerCache.getOrElseUpdate(m.fullName, {
-    val svcType = m.typeDecl.name.headOption.getOrElse("")
-    if (svcType.isEmpty) Nil
-    else {
-      val pat = ("\\." + java.util.regex.Pattern.quote(m.name) + "\\s*\\(").r
-      cpg.method.where(_.file.name("Controllers/.*\\.cs$")).l.filter { cand =>
-        cand.fullName != m.fullName &&
-        pat.findFirstIn(methodText(cand)).nonEmpty &&
-        cand.typeDecl.member.exists(_.typeFullName.split('.').last == svcType)
-      }.map { cand =>
-        System.err.println(s"// D7 LOW_CONFIDENCE edge: ${cand.fullName} -> ${m.fullName}")
-        cand
-      }
-    }
-  })
-def methodText(m: Method): String = methodSource(m)
-
+// ---- callers ----
 def allCallers(m: Method): List[Method] =
-  (m.caller.l ++ ghostCallersByName(m.fullName) ++ textCallers(m)).distinct
+  (m.caller.l ++ ghostCallersByName(m.fullName)).distinct
 
 // ---- row emitters ----
 def methodRow(m: Method): String = {

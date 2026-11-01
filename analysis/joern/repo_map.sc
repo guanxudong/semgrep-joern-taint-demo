@@ -11,15 +11,15 @@
 //   SRC_ROOT=targets/python-flask joern --script analysis/joern/repo_map.sc py_cpg.bin > /tmp/repo_map_b_py.json
 //
 // - role: path heuristic (route/controller/service/data/config/util/test, else "other")
-// - language: by extension (python/javascript/typescript/java/csharp)
+// - language: by extension (python/javascript/typescript/java)
 // - symbols: per-language cleaning — python drops <module>/<body>/<fakeNew>/
 //   <metaClassCallHandler> pseudo-methods (parent = class name for Class.m);
 //   js/ts drops :program and <lambda>N from the symbol list; anonymous
 //   route handlers get stable path-derived names via deriveName()
 //   (mirrors the tree-sitter implementation).
-//   java/cs drop <init>/<clinit>, cs also drops get_X/set_X property accessors.
-//   Signatures come from the CPG where present (java/cs); for python and js/ts
-//   the CPG signature is empty so one is synthesized from parameter names.
+//   java drops <init>/<clinit>. Signatures come from the CPG where present;
+//   for python and js/ts the CPG signature is empty so one is synthesized
+//   from parameter names.
 // - routes: same entrypoint detection as find_entrypoints.sc /
 //   extract_entrypoint_snippets.sc, plus path-prefix resolution:
 //   python: flask decorator CALL nodes (`bp.route("/x", methods=[...])`) +
@@ -27,8 +27,7 @@
 //           module-level function defined right below the decorator line.
 //   js/ts:  router.get/post/... call sites + mount prefix from
 //           `app.use('/prefix', router)` resolved through the import table.
-//   java:   @GetMapping/... + @RequestMapping base. csharp: [HttpGet]/... +
-//           [Route] base.
+//   java:   @GetMapping/... + @RequestMapping base.
 // - references: file-level call edges (caller file -> callee file, internal
 //   callees only, self-edges dropped). For python and js/ts, calls whose
 //   receiver resolves through the file's import table add an edge even when
@@ -39,8 +38,7 @@ import scala.collection.mutable.LinkedHashMap
 
 val srcRoot = sys.env.getOrElse("SRC_ROOT", ".")
 
-val lang = if (cpg.file.name(".*\\.cs$").nonEmpty) "csharp"
-           else if (cpg.file.name(".*\\.java$").nonEmpty) "java"
+val lang = if (cpg.file.name(".*\\.java$").nonEmpty) "java"
            else if (cpg.file.name(".*\\.py$").nonEmpty) "python"
            else "js"
 
@@ -52,7 +50,6 @@ def languageOf(path: String): String = path.split('.').last match {
   case "js"   => "javascript"
   case "ts"   => "typescript"
   case "java" => "java"
-  case "cs"   => "csharp"
   case _      => "unknown"
 }
 
@@ -143,10 +140,9 @@ def symbolsOf(f: String): List[LinkedHashMap[String, Any]] = lang match {
         "signature" -> synthSig(m), "line" -> m.lineNumber.getOrElse(-1), "parent" -> None))
       .sortBy(_("line").asInstanceOf[Int])
 
-  case _ => // java / csharp: real typeDecls + their methods
+  case _ => // java: real typeDecls + their methods
     val skip = (m: Method) =>
-      m.name == "<init>" || m.name == "<clinit>" || m.name.startsWith("<lambda>") ||
-      (lang == "csharp" && m.name.matches("^(get|set)_[A-Z].*"))
+      m.name == "<init>" || m.name == "<clinit>" || m.name.startsWith("<lambda>")
     val classes = cpg.typeDecl.where(_.file.nameExact(f)).l
       .filter(t => !t.name.startsWith("<") && t.name != "ANY")
       .map(t => obj("kind" -> "class", "name" -> t.name,
@@ -238,17 +234,6 @@ val routes: List[(String, String, String, String, Int)] = lang match {
           val hname = if (h.name.startsWith("<lambda>")) deriveName(path) else h.name
           (f, c.name.toUpperCase, mountPrefix(f) + path, hname, h.lineNumber.getOrElse(-1))
         }
-      }
-    }
-
-  case "csharp" =>
-    cpg.method.where(_.annotation.name("(?i).*Http(Get|Post|Put|Delete|Patch).*")).l.flatMap { m =>
-      m.file.name.headOption.map { f =>
-        val base = m.typeDecl.annotation.name("Route").code.headOption.map(routeFromAttr).getOrElse("")
-        val sub = m.annotation.name("(?i).*Http.*").code.headOption.map(routeFromAttr).getOrElse("")
-        val verb = m.annotation.name("(?i).*Http(Get|Post|Put|Delete|Patch).*").name.headOption
-          .getOrElse("Http").replace("Http", "").toUpperCase
-        (f, verb, s"/$base/$sub", m.name, m.lineNumber.getOrElse(-1))
       }
     }
 
