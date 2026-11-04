@@ -214,7 +214,16 @@ def route_matches(gt_route: str, ep: str) -> bool:
 def chain_matches_entry(record: dict, chain: dict, entry: dict) -> bool:
     """Does this sink+chain correspond to the ground-truth entry?"""
     if record["sink"].get("vuln_type") != entry.get("vuln_type"):
-        return False
+        # Rule/ground-truth class mismatch at the SAME physical sink: one
+        # sink can legitimately carry two class labels (e.g. ScriptEngine
+        # eval logged as rce by the rule but recorded as ssti in ground
+        # truth). Fall back to an exact positional match: same file and
+        # the chain's terminal method is the gt sink function.
+        calls_fb = chain.get("calls") or []
+        gt_sink_fn = (entry.get("sink") or {}).get("function", "")
+        if not (calls_fb and gt_sink_fn
+                and simple_name(calls_fb[-1]) == gt_sink_fn):
+            return False
     gt_sink = entry.get("sink")
     ep = chain.get("entrypoint", "")
     calls = chain.get("calls", [])

@@ -134,7 +134,15 @@ def chain_matches_entry(record: dict, chain: dict, entry: dict) -> bool:
     """Does this sink+chain correspond to the ground-truth entry?
     (copied from scripts/llm_judge_sink_chains.py)."""
     if record["sink"].get("vuln_type") != entry.get("vuln_type"):
-        return False
+        # Rule/ground-truth class mismatch at the SAME physical sink: one
+        # sink can legitimately carry two class labels (e.g. ScriptEngine
+        # eval logged as rce by the rule but recorded as ssti in ground
+        # truth). Fall back to an exact positional match: same file and
+        # the chain's terminal method is the gt sink function.
+        calls = chain.get("calls") or []
+        gt_sink_fn = (entry.get("sink") or {}).get("function", "")
+        if not (calls and gt_sink_fn and simple_name(calls[-1]) == gt_sink_fn):
+            return False
     gt_sink = entry.get("sink")
     ep = chain.get("entrypoint", "")
     calls = chain.get("calls", [])

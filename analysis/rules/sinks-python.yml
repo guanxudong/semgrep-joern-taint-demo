@@ -70,10 +70,17 @@ rules:
   - id: py-sink-xss
     languages: [python]
     severity: WARNING
-    message: HTML string concatenation returned to client (potential XSS sink)
+    message: HTML assembly returned to client (potential XSS sink)
     metadata: { vuln_type: xss, cwe: "79" }
-    patterns:
-      - pattern: return $HTML + $X
-      - metavariable-regex:
-          metavariable: $HTML
-          regex: '"[^"]*<[^"]*"'
+    pattern-either:
+      - patterns:
+          - pattern: return $HTML + $X
+          - metavariable-regex:
+              metavariable: $HTML
+              regex: '"[^"]*<[^"]*"'
+      - patterns:
+          # list-style assembly: appending a tag literal before the join
+          - pattern: $L.append($X)
+          - metavariable-regex:
+              metavariable: $X
+              regex: '.*<[^<>]+>.*'

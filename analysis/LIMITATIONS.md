@@ -108,24 +108,32 @@ the open weaknesses now live in the judgment/agent layer, not the engine.
 Evidence for each item: the retired `agent/HANDOFF.md` and the pruned
 PROGRESS.md entries (git history).
 
-- **Non-HTTP targets: engine-wired 2026-11-01, judgment layer unproven
-  (D17).** The securities-industry targets (`java-fix-gateway`,
+- **Non-HTTP targets: engine-wired 2026-11-01, judgment layer measured
+  2026-11-04 (D17).** The securities-industry targets (`java-fix-gateway`,
   `python-clearing-worker` — `csharp-fix-gateway` and
   `perl-clearing-worker` were removed 2026-11-01) are registered in
   `run_baseline.py` / `config.py` TARGETS, and the joern scripts now see
   registry dispatch: `router.register("KEY", obj::handler)` → `CMD KEY`,
   `bus.subscribe("subj", fn)` → `MSG subj`, `watcher.watch(dir, fn)` →
-  `FILE dir`, with handler parameters as taint sources (backward chains +
-  taint confirm measured working: 9/10 and 13/13 sinks with chains,
-  9/10 and 5/14 chains CONFIRMED). What remains HTTP-shaped: (a)
+  `FILE dir`, with handler parameters as taint sources. First LLM batch
+  (2026-11-03): judge layer A recall 7/10 (java) / 9/10 (python), tracing
+  three root causes fixed the next day: (1) scorer class-equality rejected
+  same-sink verdicts under a different class label (ScriptEngine eval
+  logged rce vs gt ssti) — `chain_matches_entry` now falls back to an
+  exact positional match (file + chain-terminal function); (2) the java
+  path-traversal rule covered only read APIs, the xss rules only string
+  concat — extended to `FileWriter`/`FileOutputStream` and tag-literal
+  `append` assembly; (3) stale agent-cache sink lists had to be cleared
+  manually (`run_baseline.py` caches per-stage artifacts, `--force` only
+  covers the baseline dir). After the fixes both targets sit at 10/10
+  (judge + tracer, gate PASS). Still open: route-shape checks —
   `compare_repo_maps.py --check` and the M6 planner's route-coverage check
   compare HTTP-style routes, so `MSG <subject>` / `CMD <cmd>` / `FILE`
   triggers score as route misses (function hits still match; measured
-  16/22 and 7/22 route hits on the two new engine-backed targets); (b)
-  the A/B LLM layers have not yet been batch-run against these targets,
-  so recall/FP on them is unmeasured; (c) pysrc2cpg's DFG loses
-  dict/subscript flows, so python-clearing-worker taint confirm sits at
-  5/14 — the tracer is expected to continue those chains at runtime.
+  16/22 and 7/22 route hits on the two new engine-backed targets);
+  pysrc2cpg's DFG loses dict/subscript flows, so python-clearing-worker
+  taint confirm sits at 5/16 — the tracer is expected to continue those
+  chains at runtime.
 
 - **Judgment-layer model drift.** DeepSeek endpoint drift has flipped
   verdicts (A-class FNs java-cmdi-01/02; safe-02 flipped to FP on 4

@@ -23,14 +23,33 @@ MVP spec), `agent/HANDOFF.md` (MVP handoff), `docs/agent-investigation-example-j
 the cut: no-LLM suite 91 passed, `run_trace.py --target canary-di --dry-run`
 end to end.
 
+## Non-HTTP targets at full A recall (2026-11-04) — scorer + rules fix
+
+First LLM batch on the two registry-dispatch targets (2026-11-03) measured
+judge-layer A recall 7/10 (java-fix-gateway) / 9/10 (python-clearing-worker).
+Root causes and fixes: (1) `chain_matches_entry` (in
+`agent/sast_agent/report.py` + `scripts/llm_judge_sink_chains.py`) rejected
+same-sink verdicts under a different class label — it now falls back to an
+exact positional match (same file, chain-terminal method == gt sink
+function), which credits e.g. ScriptEngine eval logged as rce against a gt
+ssti entry; (2) sink rules extended — java path-traversal adds
+`FileWriter`/`FileOutputStream`, java/python xss add tag-literal `append`
+assembly; (3) caveat recorded: `run_baseline.py` per-stage caching ignores
+rule edits — rerun with `--force` and clear `workspace/agent-cache/<target>/`
+before a tracer rerun. After the fixes: both targets 10/10 on judge and
+tracer, 0 safe-sample FPs, gate PASS against the re-frozen `baseline.json`
+(java-fix-gateway taint confirm 11/14, python-clearing-worker 5/16 —
+pysrc2cpg dict/subscript DFG gap unchanged). No-LLM suite 91 passed.
+
 ## C# targets removed (2026-11-01) — D18
 
 `targets/csharp-aspnet` and `targets/csharp-fix-gateway` are deleted (user
 decision): `csharpsrc2cpg`'s x86_64 astgen cannot rebuild a CPG on this
 arm64 host without Rosetta, so the C# numbers below are frozen history,
-not reproducible results. `run_baseline.py` TARGETS now lists the three
-web stacks only; the next baseline freeze prunes csharp-aspnet from
-`baseline.json`. Perl targets stay as the deliberate no-engine tier-3
+not reproducible results. `run_baseline.py` TARGETS now lists the five
+engine-backed targets (three web stacks + the two registry-dispatch
+securities targets; csharp entries were pruned from `baseline.json` on the
+2026-11-03 re-freeze). Perl targets stay as the deliberate no-engine tier-3
 degraded-mode cases.
 
 ## A-class tracer: state-machine redesign (2026-11-01) — M9 landed
