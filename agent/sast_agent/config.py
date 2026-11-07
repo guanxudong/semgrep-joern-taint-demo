@@ -47,25 +47,6 @@ SINK_TIMEOUT_SECONDS = 600
 VERIFIER_MAX_TOOL_CALLS = 10
 VERIFIER_TIMEOUT_SECONDS = 300
 
-# Category-B planner: one agent run per target. The digest carries the
-# whole route table; search/read calls are only for spot-checking
-# decorators and binding shapes, so the budget is small.
-PLANNER_MAX_TOOL_CALLS = 15
-PLANNER_TIMEOUT_SECONDS = 600
-
-# Category-B worker: per-hypothesis budgets. B-class drill-down is
-# shallower than A-class (get_forward_slice hands over the whole slice in
-# one call), so fewer tool calls; the timeout follows the old M3 SINK lesson.
-WORKER_MAX_TOOL_CALLS = 15
-WORKER_TIMEOUT_SECONDS = 600
-# Per-target total token budget for B-class runs: worker+verifier burn
-# ~2x an A-class sink (python-flask worker smoke hit the shared 2M cap).
-WORKER_TOTAL_LLM_TOKENS = 3_000_000
-# Concurrent hypotheses per target (tools are read-only, CPG/snippets
-# cached; each vulnerable finding adds 2 concurrent verifier rounds, so
-# peak in-flight LLM calls is ~3x this).
-WORKER_CONCURRENCY = 3
-
 # Tracer (A-class v2): structured trace-continuation state machine.
 # Per-sink LLM cost ≈ steps + 1 verdict call, so the step budget is the
 # real cap; the wall-clock budget reuses SINK_TIMEOUT_SECONDS semantics.

@@ -1,13 +1,9 @@
 # SAST Benchmark Targets (Semgrep + Joern + LLM)
 
-Intentionally vulnerable, simplified web projects in three language stacks —
-built to evaluate an **LLM + Semgrep + Joern** SAST
-pipeline:
-
-1. **Category A (sink-based)** — Semgrep finds sink call sites; Joern traces
-   taint backward from each sink to its HTTP entrypoint.
-2. **Category B (non-sink)** — Joern identifies entrypoints and reasons forward
-   down the call chain for business-logic flaws.
+Intentionally vulnerable, simplified projects in four language stacks —
+built to evaluate an **LLM + Semgrep + Joern** SAST pipeline for
+**category A (sink-based)** vulnerabilities: Semgrep finds sink call
+sites; Joern traces taint backward from each sink to its entrypoint.
 
 > ⚠️ **DO NOT deploy or run this code.** Every vulnerability is deliberate.
 > The projects are *source-only*: they are meant to be parsed by Semgrep and
@@ -39,13 +35,15 @@ same layering with protocol/registry dispatch instead of HTTP routes (see
 DECISIONS.md D17). Since D15 no project carries in-source `VULN:`/`SAFE:`
 markers — ground truth is the only record (anti-overfitting).
 
-## Vulnerability matrix (per project: 17 vulnerable entries + 5 safe)
+Note: the ground truth still records category-B (non-sink) entries for
+future B-class detection work; the current pipeline consumes category A
+only.
+
+## Vulnerability matrix (category A)
 
 The sink idioms below are the HTTP targets'; the non-HTTP targets use their
-own per-language idioms (e.g. `pickle.loads`/`Storable::thaw`,
-`DataTable.Compute`, `ScriptEngine.eval`) listed in each `GROUND_TRUTH.md`.
-
-### Category A — sink-based (Semgrep → sink, Joern → entrypoint)
+own per-language idioms (e.g. `pickle.loads`, `ScriptEngine.eval`) listed
+in each `GROUND_TRUTH.md`.
 
 | Type | CWE | Java | JS/TS | Python |
 |------|-----|------|-------|--------|
@@ -58,19 +56,7 @@ own per-language idioms (e.g. `pickle.loads`/`Storable::thaw`,
 | Deserialization | 502 | `ObjectInputStream.readObject` | `node-serialize.unserialize` | `pickle.loads` |
 | SSTI | 1336 | Freemarker `new Template` | `ejs.render` | `render_template_string` |
 
-### Category B — non-sink (Joern entrypoint → forward analysis)
-
-| Type | CWE | Demonstration |
-|------|-----|---------------|
-| IDOR | 639 | `GET /users/{id}` with no ownership check |
-| Business Logic Bypass | 840 | Negative transfer amounts; unlimited coupon reuse |
-| Race Condition (TOCTOU) | 367 | Check-then-act on a balance with no lock |
-| Privilege Escalation | 269 | Profile update persists a `role` field |
-| Mass Assignment | 915 | Whole request body bound/merged onto the entity |
-| Broken Access Control | 862 | Admin endpoints with no authorization at all |
-| Authentication Flaws | 287 | Hardcoded weak JWT secret; predictable reset token |
-
-### Difficulty mix (category A)
+### Difficulty mix
 
 - **shallow** — sink inside the entrypoint handler itself.
 - **medium** — entrypoint → service → data/util (2-3 files).
@@ -126,29 +112,16 @@ python3 scripts/semgrep_to_sinks.py /tmp/raw_py.json --root targets/python-flask
 SINKS_FILE=/tmp/sinks_py.json joern --script analysis/joern/backward_from_sinks.sc py_cpg.bin
 #    (omit SINKS_FILE to enumerate sinks from the CPG's built-in name table instead)
 
-# 3a. Joern entrypoint enumeration (JSON lines; works for all 3 web stacks)
-joern --script analysis/joern/find_entrypoints.sc py_cpg.bin
-
-# 3b. Joern forward trace: entrypoint -> callee -> ... -> leaves, sinks marked
-joern --script analysis/joern/forward_from_entrypoints.sc py_cpg.bin
-
-# 4. Extract source snippets for every sink chain (JSON lines, LLM-ready)
+# 3. Extract source snippets for every sink chain (JSON lines, LLM-ready)
 SINKS_FILE=/tmp/sinks_py.json joern --script analysis/joern/extract_chain_snippets.sc py_cpg.bin > /tmp/snippets_py.jsonl
 
-# 5. Dataflow confirmation: does request input actually reach each sink argument?
+# 4. Dataflow confirmation: does request input actually reach each sink argument?
 SINKS_FILE=/tmp/sinks_py.json joern --script analysis/joern/taint_confirm.sc py_cpg.bin > /tmp/taint_py.jsonl
 
-# 6. LLM judgment (category A): is each sink->entrypoint chain a real vulnerability?
+# 5. LLM judgment (category A): is each sink->entrypoint chain a real vulnerability?
 #    (DeepSeek via pydantic-ai; needs DEEPSEEK_API_KEY in env or .env)
 uv run scripts/llm_judge_sink_chains.py --snippets /tmp/snippets_py.jsonl \
     --ground-truth targets/python-flask/ground_truth.json -o /tmp/verdicts_py.jsonl
-
-# 7. Category B (non-sink): extract handler + forward-reachable source per entrypoint
-SRC_ROOT=targets/python-flask joern --script analysis/joern/extract_entrypoint_snippets.sc py_cpg.bin > /tmp/ep_snippets_py.jsonl
-
-# 8. LLM judgment (category B): judge each endpoint against all 7 non-sink classes
-uv run scripts/llm_judge_entrypoints.py --snippets /tmp/ep_snippets_py.jsonl \
-    --ground-truth targets/python-flask/ground_truth.json -o /tmp/verdicts_b_py.jsonl
 ```
 
 Files:
@@ -157,14 +130,10 @@ Files:
 | ---- | ------- |
 | `analysis/rules/sinks-{python,java,js}.yml` | Semgrep sink rules, 8 category-A classes per language |
 | `scripts/semgrep_to_sinks.py` | Semgrep JSON → compact sink list (`file`/`line`/`rule`/`vuln_type`) |
-| `analysis/joern/find_entrypoints.sc` | Entrypoint enumeration (Flask routes, Spring mappings, Express router calls) |
 | `analysis/joern/backward_from_sinks.sc` | Reverse call-chain walk from each sink to an entrypoint |
-| `analysis/joern/forward_from_entrypoints.sc` | Forward call-graph walk from each entrypoint, sinks marked |
 | `analysis/joern/extract_chain_snippets.sc` | Dumps source code of every method on each sink→entrypoint chain (JSON lines; set `SRC_ROOT` to the parse root when the frontend leaves method `code` empty) |
-| `analysis/joern/extract_entrypoint_snippets.sc` | Dumps every HTTP entrypoint plus the source of its forward-reachable callees (BFS depth ≤ 5, JSON lines; `SRC_ROOT` as above) — input for the category-B LLM path |
 | `analysis/joern/taint_confirm.sc` | Dataflow confirmation: `sink.argument.reachableByFlows(request.* sources)` per Semgrep sink; JSON lines with `CONFIRMED`/`UNCONFIRMED` + flow paths |
 | `scripts/llm_judge_sink_chains.py` | LLM judgment layer, category A (pydantic-ai + DeepSeek): synthesizes each sink→entrypoint chain's snippets into a prompt, returns a structured verdict, and scores recall/FP against `ground_truth.json` (`--from-verdicts` re-scores without re-calling the LLM) |
-| `scripts/llm_judge_entrypoints.py` | LLM judgment layer, category B (same DeepSeek setup): judges each entrypoint + forward-reachable source against all 7 non-sink classes and scores the category-B ground-truth entries (file+function match, route fallback) |
 
 The same commands work for the other targets — swap the rules file
 (`sinks-java.yml`, `sinks-js.yml`) and the CPG.
@@ -172,18 +141,16 @@ The same commands work for the other targets — swap the rules file
 ## Autonomous investigation agent (`agent/`)
 
 The `agent/` directory turns the fixed pipeline above into a **pydantic-ai
-investigation agent**. Category A (sink-based) uses the **tracer state
-machine**: the Python orchestrator owns a per-sink `TraceState` dossier and
-executes every engine step itself (`trace_engine.py`, one Joern JVM per
-directive), while the LLM answers ONE structured `TraceStep` per round —
-resolve candidates, judge completeness, issue at most one directive from a
-closed menu (`callers_of` / `writes_to` / `reads_of` / `find_call_sites` /
-`trace_back` / `methods_in_file` / `read_file` / `search_code`). The LLM
-never touches Joern syntax, and every LLM-inferred hop must carry a
-disk-checkable `justify_ref`. Category B (non-sink) uses the
-planner/worker pair (`run_planner.py` → `run_worker.py`), and every
-vulnerable verdict passes an attacker/defender adversarial review
-(`verifier.py`) before it reaches the report.
+investigation agent**. The **tracer state machine** owns a per-sink
+`TraceState` dossier and executes every engine step itself
+(`trace_engine.py`, one Joern JVM per directive), while the LLM answers ONE
+structured `TraceStep` per round — resolve candidates, judge completeness,
+issue at most one directive from a closed menu (`callers_of` / `writes_to` /
+`reads_of` / `find_call_sites` / `trace_back` / `methods_in_file` /
+`read_file` / `search_code`). The LLM never touches Joern syntax, and every
+LLM-inferred hop must carry a disk-checkable `justify_ref`. Every vulnerable
+verdict passes an attacker/defender adversarial review (`verifier.py`)
+before it reaches the report.
 
 ```bash
 # category A, one target (reports -> workspace/agent-reports/<target>-trace/)
@@ -193,20 +160,16 @@ uv run --offline agent/run_trace.py --target python-flask
 # (reports -> workspace/agent-reports/<date>-trace/)
 uv run --offline agent/run_trace.py --target all
 
-# category B (planner then worker)
-uv run --offline agent/run_planner.py --target python-flask
-uv run --offline agent/run_worker.py --target python-flask
-
 # regression gate against the frozen baseline: non-zero exit when
 # category-A recall drops or a new safe-sample FP appears
 python3 agent/run_baseline.py --compare
 ```
 
-Status (2026-11-01): category-A recall 10/10 on all three web targets via
-the tracer, 0 safe-sample FPs, baseline gate PASS; category-B recall 7/7
-with only the baseline-known safe-02 FPs. The old free-form investigator
-path was retired after the tracer passed the gate (DECISIONS.md D19).
-Details: `PROGRESS.md`; roadmap: `plan.md`.
+Status: category-A recall 11/11 (python-flask), 12/12 (java-spring,
+js-ts-express), 10/10 (java-fix-gateway, python-clearing-worker) via the
+tracer, 0 safe-sample FPs, baseline gate PASS. The old free-form
+investigator path was retired after the tracer passed the gate
+(DECISIONS.md D19). Details: `PROGRESS.md`; roadmap: `plan.md`.
 
 ## Notes
 

@@ -1,6 +1,6 @@
 """no-LLM tests for the regression gate (agent/run_baseline.py --compare).
 
-Covers the three dimensions added on top of the M5/M8 recall/FP gate:
+Covers the three dimensions added on top of the M5 recall/FP gate:
 SKIP-vs-FAIL semantics for targets without a comparable baseline (P0),
 provenance classification of a failure (P2), and the token / confirmed-rate /
 leak dimensions (P3).
@@ -72,7 +72,7 @@ def gate(tmp_path, monkeypatch, capsys):
 
 # ---- P0: SKIP is not a regression ---------------------------------------
 
-def test_target_without_judge_baseline_is_skipped_not_failed(gate):
+def test_target_without_baseline_is_skipped_not_failed(gate):
     """python-flask-enterprise was frozen with --skip-llm, so judge_a is
     empty. Before this fix the gate FAILED unconditionally on it, which made
     every `--target all` run exit 1 for reasons unrelated to code quality."""
@@ -80,8 +80,7 @@ def test_target_without_judge_baseline_is_skipped_not_failed(gate):
         summary_targets={"python-flask-enterprise": {"recall_A_hit": 12,
                                                      "recall_A": "12/12",
                                                      "safe_fp": [], "tokens": 1}},
-        baseline_targets={"python-flask-enterprise": {"chains": {}, "judge_a": {},
-                                                      "judge_b": {}}})
+        baseline_targets={"python-flask-enterprise": {"chains": {}, "judge_a": {}}})
     assert code == 0
     assert "SKIP" in out and "no judge_a baseline" in out
 
@@ -91,7 +90,7 @@ def test_require_baseline_promotes_skip_to_fail(gate):
         summary_targets={"python-flask-enterprise": {"recall_A_hit": 12,
                                                      "recall_A": "12/12",
                                                      "safe_fp": []}},
-        baseline_targets={"python-flask-enterprise": {"judge_a": {}, "judge_b": {}}},
+        baseline_targets={"python-flask-enterprise": {"judge_a": {}}},
         require_baseline=True)
     assert code == 1
     assert "FAIL" in out
@@ -104,13 +103,13 @@ def test_missing_baseline_entry_fails(gate):
     assert "no baseline entry" in out
 
 
-# ---- original M5/M8 dimensions still hold --------------------------------
+# ---- original M5 dimensions still hold ---------------------------------
 
 def test_equal_recall_passes(gate):
     code, out = gate(
         summary_targets={"python-flask": {"recall_A_hit": 10, "recall_A": "10/10",
                                           "safe_fp": [], "tokens": 1000}},
-        baseline_targets={"python-flask": {"judge_a": _judge(), "judge_b": {}}})
+        baseline_targets={"python-flask": {"judge_a": _judge()}})
     assert code == 0 and "PASS" in out
 
 
@@ -118,13 +117,13 @@ def test_recall_drop_fails(gate):
     code, out = gate(
         summary_targets={"python-flask": {"recall_A_hit": 9, "recall_A": "9/10",
                                           "safe_fp": []}},
-        baseline_targets={"python-flask": {"judge_a": _judge(), "judge_b": {}}})
+        baseline_targets={"python-flask": {"judge_a": _judge()}})
     assert code == 1
-    assert "recall dropped 10 -> 9" in out
+    assert "A recall dropped 10 -> 9" in out
 
 
 def test_baseline_known_fp_tolerated_new_fp_fails(gate):
-    known = {"python-flask": {"judge_a": _judge(fp=["py-safe-02"]), "judge_b": {}}}
+    known = {"python-flask": {"judge_a": _judge(fp=["py-safe-02"])}}
     code, _ = gate(
         summary_targets={"python-flask": {"recall_A_hit": 10, "recall_A": "10/10",
                                           "safe_fp": ["py-safe-02"]}},
@@ -150,10 +149,9 @@ def _prov(**over):
     base = {
         "version": 2, "model": "deepseek-chat", "base_url": "https://api.deepseek.com",
         "engine_files": {"analysis/joern/backward_from_sinks.sc": "aaa"},
-        "judge_scripts": {"scripts/llm_judge_sink_chains.py": "jjj",
-                          "scripts/llm_judge_entrypoints.py": "jjj"},
+        "judge_scripts": {"scripts/llm_judge_sink_chains.py": "jjj"},
         "targets": {"python-flask": {"tree_sha": "t1:3", "snippets_sha": "s1:2",
-                                     "ep_snippets_sha": "e1:4", "chains_sha": "c1:1"}},
+                                     "chains_sha": "c1:1"}},
     }
     base.update(over)
     return base
@@ -186,7 +184,7 @@ def test_real_regression_when_nothing_moved(gate, monkeypatch):
     code, out = gate(
         summary_targets={"python-flask": {"recall_A_hit": 8, "recall_A": "8/10",
                                           "safe_fp": []}},
-        baseline_targets={"python-flask": {"judge_a": _judge(), "judge_b": {}}},
+        baseline_targets={"python-flask": {"judge_a": _judge()}},
         prov=_prov())
     assert code == 1
     assert "REAL_REGRESSION" in out
@@ -197,7 +195,7 @@ def test_model_drift_is_named(gate, monkeypatch):
     code, out = gate(
         summary_targets={"python-flask": {"recall_A_hit": 8, "recall_A": "8/10",
                                           "safe_fp": []}},
-        baseline_targets={"python-flask": {"judge_a": _judge(), "judge_b": {}}},
+        baseline_targets={"python-flask": {"judge_a": _judge()}},
         prov=_prov(model="deepseek-v4-flash"))
     assert code == 1
     assert "MODEL_DRIFT" in out and "deepseek-v4-flash -> deepseek-chat" in out
@@ -208,15 +206,14 @@ def test_code_change_is_named(gate, tmp_path, monkeypatch):
     (tmp_path / "cache" / "python-flask").mkdir(parents=True)
     monkeypatch.setattr(rb, "TARGETS", {"python-flask": {"tree": "targets/python-flask"}})
     monkeypatch.setattr(rb, "_target_state", lambda *a, **k: {
-        "tree_sha": "t2:3", "snippets_sha": "s9:2", "ep_snippets_sha": "e1:4",
-        "chains_sha": "c1:1"})
+        "tree_sha": "t2:3", "snippets_sha": "s9:2", "chains_sha": "c1:1"})
     code, out = gate(
         summary_targets={"python-flask": {"recall_A_hit": 8, "recall_A": "8/10",
                                           "safe_fp": []}},
-        baseline_targets={"python-flask": {"judge_a": _judge(), "judge_b": {}}},
+        baseline_targets={"python-flask": {"judge_a": _judge()}},
         prov=_prov())
     assert code == 1
-    assert "CODE_CHANGED" in out and "SNIPPET_CHANGED(A)" in out
+    assert "CODE_CHANGED" in out and "SNIPPET_CHANGED" in out
     assert "REAL_REGRESSION" not in out
 
 
@@ -232,7 +229,7 @@ def test_engine_change_is_named(gate, monkeypatch):
     code, out = gate(
         summary_targets={"python-flask": {"recall_A_hit": 8, "recall_A": "8/10",
                                           "safe_fp": []}},
-        baseline_targets={"python-flask": {"judge_a": _judge(), "judge_b": {}}},
+        baseline_targets={"python-flask": {"judge_a": _judge()}},
         prov=_prov())
     assert code == 1
     assert "ENGINE_CHANGED(" in out and "taint_confirm.sc" in out
@@ -383,8 +380,3 @@ def test_read_baseline_tolerates_v1_flat(tmp_path, monkeypatch):
     data = rb._read_baseline()
     assert data["version"] == 1
     assert "python-flask" in data["targets"]
-
-
-def test_is_b_summary_detects_shape():
-    assert rb._is_b_summary({"targets": {"py": {"recall_B": "7/7"}}}) is True
-    assert rb._is_b_summary({"targets": {"py": {"recall_A": "10/10"}}}) is False

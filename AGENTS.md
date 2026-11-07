@@ -1,7 +1,8 @@
 # Agent Guidance: SAST Benchmark Targets
 
 This repository contains **intentionally vulnerable** test-target projects used
-to benchmark an LLM + Semgrep + Joern SAST pipeline.
+to benchmark an LLM + Semgrep + Joern SAST pipeline for **category A
+(sink-based)** vulnerabilities.
 
 ## Core constraints
 
@@ -43,10 +44,9 @@ to benchmark an LLM + Semgrep + Joern SAST pipeline.
     `FILE <kind>`) instead of an HTTP route. **Message/file/command
     dispatch must always be written registry-shaped**
     (`router.register("D", fn)` / `HANDLERS["D"] = fn` /
-    `subscribe(subject, fn)`) — never a switch — so tree-sitter
-    (`scripts/repo_map.py`, routes table `kind: message|command|file`) and
-    Joern can both see the entrypoints. External dependencies are in-repo
-    stubs or the language standard library (source-only constraint).
+    `subscribe(subject, fn)`) — never a switch — so Joern can see the
+    entrypoints. External dependencies are in-repo stubs or the language
+    standard library (source-only constraint).
 - **No target carries in-source ground-truth markers.** Since 2026-09-26
   (DECISIONS.md D15) the `VULN:`/`SAFE:` comment convention is retired
   everywhere, and source comments must never reveal a vulnerability's
@@ -54,31 +54,26 @@ to benchmark an LLM + Semgrep + Joern SAST pipeline.
   `ground_truth.json` + `GROUND_TRUTH.md` are the only record
   (anti-overfitting; the enterprise pilot started this as D11).
 - Each target has `ground_truth.json` + `GROUND_TRUTH.md` (kept in sync).
+  The ground truth still records category-B (non-sink) entries for future
+  B-class detection work; the current pipeline consumes category A only.
   (The fifth target `targets/jsp-legacy/` and its transpiler
   `scripts/jsp_to_java.py` were removed on 2026-09-05 by user decision —
   recoverable from git history.)
 - `analysis/rules/` — Semgrep sink rules per language (8 category-A classes).
-- `analysis/joern/` — Joern scripts: entrypoint enumeration, sink→entrypoint
-  backward trace (JSONL side output via `CHAINS_JSON`, plus a `dead_end`
-  record per no-chain sink naming the stall method and its unresolved
-  calls), entrypoint→down
-  forward trace, chain source-snippet extraction
-  (`extract_chain_snippets.sc`; set `SRC_ROOT` to the parse root),
-  entrypoint+forward-reachable source-snippet extraction
-  (`extract_entrypoint_snippets.sc`), dataflow taint confirmation
-  (`taint_confirm.sc`), single-directive trace step for the tracer
-  (`trace_step.sc`; set `DIRECTIVE_FILE` to a JSON directive, one JVM per
-  directive; `callers_of` falls back to identifier reference sites so
-  registry-value functions resolve), CPG-derived repo map (`repo_map.sc`;
-  prints one JSON object on stdout — joern logs go to stdout too, so pipe
-  through `awk '/^\{$/,/^\}$/'`).
+- `analysis/joern/` — Joern scripts: sink→entrypoint backward trace
+  (JSONL side output via `CHAINS_JSON`, plus a `dead_end` record per
+  no-chain sink naming the stall method and its unresolved calls), chain
+  source-snippet extraction (`extract_chain_snippets.sc`; set `SRC_ROOT` to
+  the parse root), dataflow taint confirmation (`taint_confirm.sc`),
+  single-directive trace step for the tracer (`trace_step.sc`; set
+  `DIRECTIVE_FILE` to a JSON directive, one JVM per directive; `callers_of`
+  falls back to identifier reference sites so registry-value functions
+  resolve).
 - `analysis/LIMITATIONS.md` — known gaps: §§1–3 the factual engine/pipeline
   record (source coverage, dataflow-engine limits, pipeline issues;
   engine-side work dropped 2026-09-10), §4 the live agent/LLM-layer
-  backlog (model drift, safe-02 FP, verifier asymmetry, budget truncation,
-  hardcoded coverage assumptions, enterprise validation gap), §5 the
-  pruned engine ideas backlog (empty; roadmap pointer to plan.md). Read
-  this first when resuming analysis work in a new session.
+  backlog, §5 the pruned engine ideas backlog (empty; roadmap pointer to
+  plan.md). Read this first when resuming analysis work in a new session.
 - `plan.md` (repo root) — roadmap, re-sequenced 2026-09-23 (D14): Phase 1 =
   AI SAST agent productization (M14.1 orchestrator → M14.3 enterprise
   validation → M14.2 tri-state judge + model tiering → M9 → M11);
@@ -98,40 +93,20 @@ to benchmark an LLM + Semgrep + Joern SAST pipeline.
   `extract_chain_snippets.sc` output and scores recall / safe-sample FPs
   against `ground_truth.json`. Run with `uv run` (PEP 723 deps inline);
   `--from-verdicts` re-scores a saved verdicts JSONL without new LLM calls.
-- `scripts/llm_judge_entrypoints.py` — LLM judgment layer for category B
-  (same DeepSeek setup). Judges each HTTP entrypoint from
-  `extract_entrypoint_snippets.sc` output (handler + forward-reachable
-  callee source) semantically against all 7 non-sink classes, then scores
-  the category-B entries of `ground_truth.json` (matching on file+function,
-  route as fallback). Same CLI shape as `llm_judge_sink_chains.py`.
-- `scripts/repo_map.py` — repo-map generator (tree-sitter, `uv run`, PEP
-  723 deps inline; Java/JS/TS/Python/C#). Emits an LLM-consumable Markdown
-  map (directory tree + roles, route table for Flask/Express/Spring/
-  ASP.NET plus non-HTTP entrypoints registered via
-  `subscribe`/`register`/`watch` (kind: message/command/file), per-file
-  symbols, import-level reference graph) plus a JSON twin.
-  `--check ground_truth.json` cross-checks extracted routes/functions.
-  This is the default mapper for unknown repos (zero prerequisites); see
-  `analysis/repo_map_compare.md` for the tree-sitter vs Joern comparison.
-- `scripts/compare_repo_maps.py` — scores one or more repo-map JSONs
-  (tree-sitter or joern schema) against a `ground_truth.json`: route and
-  function hit rates plus coverage stats.
 - `agent/` — investigation agent (post-MVP; the original M0–M8 MVP spec and
   handoff were retired with the investigator path on 2026-11-01, D19):
   `sast_agent/` package (config/contracts/pipeline/scrub/tools/report +
-  tracer + verifier + planner/worker), CLIs
-  `run_trace.py` (category A), `run_planner.py` + `run_worker.py`
-  (category B), `run_baseline.py` (baseline freezer; `--compare` = regression
-  gate against `workspace/baseline/baseline.json` (v2: `{version, provenance,
-  targets}`), auto-detects A-class `summary.json` vs B-class
-  `summary_b.json`; verdicts PASS/SKIP/FAIL where SKIP = "not comparable"
-  and never fails unless `--require-baseline`; every FAIL names its cause
-  — MODEL_DRIFT / CODE_CHANGED / SNIPPET_CHANGED / ENGINE_CHANGED /
+  tracer + verifier), CLI `run_trace.py` (category A),
+  `run_baseline.py` (baseline freezer; `--compare` = regression gate
+  against `workspace/baseline/baseline.json` (v2: `{version, provenance,
+  targets}`); verdicts PASS/SKIP/FAIL where SKIP = "not comparable" and
+  never fails unless `--require-baseline`; every FAIL names its cause —
+  MODEL_DRIFT / CODE_CHANGED / SNIPPET_CHANGED / ENGINE_CHANGED /
   JUDGE_CHANGED, else REAL_REGRESSION — and optional dimensions
-  `--max-token-delta PCT` (vs the previous same-shape batch),
+  `--max-token-delta PCT` (vs the previous batch),
   `--min-confirmed-rate PCT`, `--forbid-leak`), smoke scripts
-  (`smoke_tools.py`, `smoke_verifier.py`, `smoke_m8.py`). Same DeepSeek env
-  as the LLM judges. Agent tools must never read `ground_truth.json` /
+  (`smoke_tools.py`, `smoke_verifier.py`). Same DeepSeek env as the LLM
+  judge. Agent tools must never read `ground_truth.json` /
   `GROUND_TRUTH.md` (hard-refused) nor write under `targets/`.
   - **Tracer path (category A, state-machine design)**: `trace_schema.py`
     (Hop/Candidate/TraceDirective/TraceStep/TraceState — the LLM fills one
@@ -164,12 +139,11 @@ to benchmark an LLM + Semgrep + Joern SAST pipeline.
   `GroundTruthLeak` raised (the run fails); suspected (a bare
   `<lang>-<type>-<nn>` id) → audited only. Never reads ground truth: the id
   shape is a hardcoded regex. Wired into `SastTools.read_function` /
-  `search_code` / `get_chain_snippets` / `get_forward_slice` (covers
-  tracer, worker, verifier) and both judges' `build_prompt`; both
-  judges also accept `--check-leak` to build every prompt and assert offline
-  (no API key). Fixtures for the shapes: `tests/fixtures/leak/` (the
-  targets themselves are marker-free since D15 and cannot serve as
-  fixtures).
+  `search_code` / `get_chain_snippets` (covers tracer + verifier) and the
+  judge's `build_prompt`; the judge also accepts `--check-leak` to build
+  every prompt and assert offline (no API key). Fixtures for the shapes:
+  `tests/fixtures/leak/` (the targets themselves are marker-free since D15
+  and cannot serve as fixtures).
 - `tests/` — no-LLM test suite: `uv run --with pytest --with pydantic
   --with "pydantic-ai-slim[openai]>=2.0.0" --with python-dotenv pytest
   tests -q`
@@ -183,10 +157,13 @@ to benchmark an LLM + Semgrep + Joern SAST pipeline.
 
 ## Vulnerability taxonomy
 
-15 classes per project: 8 sink-based category A (sqli, xss, cmdi,
-path-traversal, rce, xxe, deserialization, ssti) and 7 non-sink category B
-(idor, business-logic, race-condition, priv-esc, mass-assignment,
-broken-access-control, auth-flaws), plus 5 negative samples.
+Category A per project: 8 sink-based classes (sqli, xss, cmdi,
+path-traversal, rce, xxe, deserialization, ssti), plus 5 negative samples.
+The ground truth additionally records 7 non-sink category-B classes (idor,
+business-logic, race-condition, priv-esc, mass-assignment,
+broken-access-control, auth-flaws) for future B-class detection work; the
+current pipeline (rules, Joern scripts, tracer, LLM judge, regression gate)
+consumes category A only.
 
 ## Changing the targets
 
@@ -214,8 +191,7 @@ When adding/modifying a vulnerability:
   `--compare` is the only gate that sees LLM verdicts.
 - **Leak check (no LLM):** `uv run scripts/llm_judge_sink_chains.py
   --check-leak --snippets <snips.jsonl> --ground-truth targets/<t>/ground_truth.json`
-  (and the entrypoints variant with `--snippets <ep_snippets.jsonl>`). Runs
-  in CI/without an API key; non-zero exit on a leak.
+  Runs in CI/without an API key; non-zero exit on a leak.
 - **LLM runs on this host:** httpx reads the macOS *system* proxy bypass
   list when no proxy env var is set, and chokes on IPv6 bypass entries
   (`httpx.InvalidURL: Invalid port: ':1]'` from a `::1`/`[::1]` bypass

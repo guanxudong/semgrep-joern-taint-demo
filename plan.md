@@ -2,7 +2,9 @@
 
 > 2026-09-10 制定。M0–M8 已全部关闭（原规格与执行记录随 investigator
 > 路径于 2026-11-01 一并退役，见 DECISIONS.md D19；历史可在 git 查到），
-> benchmark 在天花板：A 类 recall 10/10、B 类 7/7、SAFE FP 仅基线自带。
+> benchmark 在天花板：A 类 recall 全满（2026-11-07 ground truth 重审补记
+> 8 条 sqli 后为 10/10–12/12 视 target），SAFE FP 仅基线自带。
+> 当前架构只针对 A 类（sink-based）；B 类检测后续另行立项。
 > 本计划是 post-MVP 路线图，按 ROI 排序。
 >
 > 2026-10 更新：enterprise 试点 `targets/python-flask-enterprise/` 已由用户
@@ -75,19 +77,18 @@ M13.2（模型漂移监控，~0.5d）不推后也不单独立项：随 baseline 
   维护 hits/confirmed/vetoed，连续全 veto 进隔离区）。experimental 规则的
   finding 置信度降一档，跑稳晋升 stable。
 - 验收：在 workspace/ 造一个使用 KB 外库的场景，走完"信号 → 提议 → 候选
-  → 门禁 → 入库"闭环，且 3 个 web 目标回归全绿。
+  → 门禁 → 入库"闭环，且全 target 回归全绿。
 
-## M11 — 知识库沉淀 + guard 前置（成本）
+## M11 — 知识库沉淀 + sanitizer 复用（成本）
 
-- **M11.1 路由 guard 链前置提取**（~0.5d）：`extract_entrypoint_snippets.sc`
-  提取该路由实际经过的中间件/装饰器源码（Flask `before_request` / Express
-  `app.use` 顺序 / Spring filter / ASP.NET middleware），一次提取、所有
-  hypothesis 复用。省掉 M7 defender 每轮手工搜 middleware 的重复开销。
 - **M11.2 sanitizer/guard 知识库**（~1d）：defender 轮次每轮都在重新发现
   同样的 sanitizer 知识（参数化查询、allow-list、硬化 XML 解析器），跑完
   即弃。按 `docs/why-not-agent-memory.md` §4 的结构化方案沉淀为 versioned
   JSON：条目带 evidence refs + 失效条件（enclosing function 变化即过期），
-  以**显式上下文注入**喂给 investigator/verifier——不是隐式记忆。
+  以**显式上下文注入**喂给 tracer/verifier——不是隐式记忆。
+
+  （原 M11.1 路由 guard 链前置提取依赖 entrypoint 正向切片脚本，随 B 类
+  检测一并移出当前架构；若未来恢复 B 类可重提。）
 
 ## M12 — 自我改进主循环（复利）（⏸ 推后，Phase 2）
 
@@ -120,11 +121,11 @@ M13.2（模型漂移监控，~0.5d）不推后也不单独立项：随 baseline 
 只降优先级不丢弃）；LLM 用量与不确定性挂钩，不与代码量挂钩。
 执行顺序：M14.1 → M14.3 → M14.2。
 
-- **M14.1 统一编排器**（~1.5d）：`run_trace.py` / `run_planner.py` /
-  `run_worker.py` 三个 CLI 收进一个 orchestrator，产出一份分阶段漏斗
-  报告（每层的输入/输出/降级原因/tokens 分段统计）——现在是割裂的
-  三份。验收：`uv run agent/run.py --target <name>` 一条命令跑完
-  A+B 全程，漏斗报告落盘，3 个 web 目标回归门禁 PASS。
+- **M14.1 统一编排器**（~1.5d）：`run_trace.py` / `run_baseline.py`
+  收进一个 orchestrator，产出一份分阶段漏斗报告（每层的输入/输出/
+  降级原因/tokens 分段统计）。验收：`uv run agent/run.py --target
+  <name>` 一条命令跑完 A 类全程，漏斗报告落盘，全 target 回归门禁
+  PASS。
 - **M14.3 真实形态代码全量验证**（~1d + token 预算）：LLM judge + agent
   全量跑一个分层/真实形态的验证场，实测下钻负载（目前是外推不是实测；
   LIMITATIONS §4）。**验证场待重定**：原 enterprise 试点
@@ -139,7 +140,7 @@ M13.2（模型漂移监控，~0.5d）不推后也不单独立项：随 baseline 
   不直接丢弃）；批量初判用便宜模型，下钻/复核才用强模型。对应
   LIMITATIONS §4 的成本条目——目前最大的成本杠杆。验收：同等 recall
   下验证场全量 token 消耗显著下降（基线 = M14.3 实测值），
-  3 个 web 目标回归门禁 PASS、0 新 SAFE FP。**成本护栏已就位（D16）**：
+  全 target 回归门禁 PASS、0 新 SAFE FP。**成本护栏已就位（D16）**：
   `run_baseline.py --compare … --max-token-delta 30` 会把
   "recall 不降但 token 暴涨" 变成一次 FAIL，成本基线取上一次同形态
   batch（judge 基线每链一次调用，与 agent 每次下钻不可比）。

@@ -45,9 +45,31 @@ FPs, GATE: PASS), so the old path was deleted the same day: `agent/run_agent.py`
 investigator-only budget constant. `run_trace.py` inlined the
 `finalize_target` post-run tail it previously imported from run_agent.
 Retired docs (closed-MVP spec, handoff, investigator walkthrough) went
-with it — all recoverable from git history. The B-class planner/worker
-playbooks are unchanged; the attacker/defender verifier is shared by both
-classes and stays.
+with it — all recoverable from git history. The attacker/defender
+verifier is shared infrastructure and stays.
+
+### D20. Category-B machinery removed; the architecture is A-class only (2026-11-07)
+
+Context: the pipeline was built for a 15-class taxonomy, but the
+productized architecture (tracer state machine, orchestrator roadmap
+M14.x) targets category A (sink-based) only. The B-class
+planner/worker path, the entrypoints LLM judge, the entrypoint
+forward-slice joern scripts, and the repo-map tooling (a B-class-only
+consumer) carried running cost and gate surface that the A-only
+architecture never uses.
+
+Decision (user): remove all of it — `run_planner.py` / `run_worker.py`,
+`sast_agent/planner.py` / `worker.py`, `scripts/llm_judge_entrypoints.py`,
+`extract_entrypoint_snippets.sc` / `find_entrypoints.sc` /
+`forward_from_entrypoints.sc` / `repo_map.sc`, `scripts/repo_map.py` /
+`compare_repo_maps.py`, `smoke_m8.py`, the gate's B-mode, and every
+planner/worker contract, tool, budget and report block. The baseline
+gate and freezer are A-only (`judge_a` only).
+
+What stays: the 6 targets' source and ground truth are untouched —
+`ground_truth.json` / `GROUND_TRUTH.md` still record the 7 non-sink
+classes as benchmark data for future B-class detection work; the
+scrubber and the ground-truth validator keep covering those entries.
 
 ## Answer-leak hardening (2026-09-26)
 
@@ -90,8 +112,8 @@ Gap found while auditing the measurement layer (not the pipeline):
    would have been silent — LIMITATIONS §4 classes leak paths as "a class
    of issue, not a fixed bug".
 2. **The gate failed for the wrong reason.** A target registered in
-   TARGETS but frozen with `--skip-llm` left `judge_a`/`judge_b` empty,
-   and `compare_with_baseline()` read that as "recall unparseable" → FAIL.
+   TARGETS but frozen with `--skip-llm` left `judge_a` empty, and
+   `compare_with_baseline()` read that as "recall unparseable" → FAIL.
    Every full batch run was guaranteed to exit 1 for reasons unrelated to
    code quality.
 3. **A recall drop carried no cause.** Code edit, snippet change, rule/joern
@@ -112,17 +134,16 @@ Decisions:
   line). Suspected hits are audited, not fatal, because a real repo may
   legitimately name a fixture after a CVE-style id.
 - **Assertion choke points, not per-call-site code**: `SastTools` scrubs
-  `read_function` / `search_code` / `get_chain_snippets` /
-  `get_forward_slice`, and both judges scrub the assembled `build_prompt`.
-  New callers cannot forget.
-- **`--check-leak` on both judges** builds every prompt and asserts, with
+  `read_function` / `search_code` / `get_chain_snippets`, and the judge
+  scrubs the assembled `build_prompt`. New callers cannot forget.
+- **`--check-leak` on the judge** builds every prompt and asserts, with
   no API key, so the leak guard is testable offline.
 - **Gate verdicts are PASS / SKIP / FAIL.** SKIP = "not comparable" and
   never fails the gate; `--require-baseline` promotes it to FAIL for
   strict runs.
 - **`baseline.json` is version 2**: `{version, provenance, targets}` with
   provenance = model + base_url, semgrep version, joern fingerprint, git
-  rev/dirty, sha of both judge scripts, sha of every `analysis/joern/*.sc`
+  rev/dirty, sha of the judge script, sha of every `analysis/joern/*.sc`
   + `analysis/rules/*.yml` + the deterministic scripts (the ENGINE
   fingerprint), and per target `tree_sha` + record-level shas of chains /
   snippets / entrypoint snippets. v1 flat files are read transparently and
@@ -177,11 +198,7 @@ Decisions:
   preserved (matching keys on file+function).
 - **Dispatch must be registry-shaped** (`router.register("D", handler)` /
   `HANDLERS["D"] = fn` / `subscribe(subject, fn)`), never a switch, so
-  tree-sitter and Joern can both see the entrypoints (AGENTS.md records
-  the convention).
-- **Mapper support**: `scripts/repo_map.py` extracts the registration
-  calls into the routes table (`method` MSG/CMD/FILE, extra `kind` key —
-  HTTP routes are unaffected).
+  Joern can see the entrypoints (AGENTS.md records the convention).
 - **Registration (done 2026-11-01, user decision)**: both targets are in
   `run_baseline.py` / `config.py` TARGETS, and the joern scripts gained
   the same registry scan (register/subscribe/watch → CMD/MSG/FILE
@@ -189,9 +206,7 @@ Decisions:
   across 7 scripts, same convention as the M9.0-lite sink block).
   Measured on first freeze: 9/10 and 13/13 sinks with backward chains,
   9/10 and 5/14 chains taint-CONFIRMED. Still open: route-shape checks
-  (`compare_repo_maps.py --check`, planner coverage) assume HTTP routes —
-  function hits still match (LIMITATIONS.md §4); the A/B LLM layers have
-  not been batch-run on these targets yet.
+  assume HTTP routes — function hits still match (LIMITATIONS.md §4).
 
 Current non-HTTP targets: `java-fix-gateway` and `python-clearing-worker`
 (`perl-clearing-worker` was removed on 2026-11-01 as redundant; perl-cgi
@@ -204,26 +219,20 @@ same taxonomy as the HTTP targets.
 
 Gap: the benchmark may need targets in languages lacking a Semgrep
 grammar, a Joern frontend, or both. Verified 2026-09-14: Semgrep has no
-Perl grammar at all; Joern has no Perl frontend; tree-sitter-language-pack
-bundles a perl grammar. Perl is tier-3: neither engine can see it —
-A-class screening dies at `ensure_cpg` and the B-class worker at
-`get_forward_slice`.
+Perl grammar at all; Joern has no Perl frontend. Perl is tier-3: neither
+engine can see it — A-class screening dies at `ensure_cpg`.
 
 Decision: **design only, no code yet** — for tier-3 languages, a degraded
 agent-only mode: (1) a per-language heuristic sink scanner emitting the
 exact `sinks.json` contract (`semgrep_to_sinks.py` output shape), swapped
-in via a per-target `engines` / `sink_detector` config key; (2) the
-tree-sitter repo map as the only structural index (register perl in
-`scripts/repo_map.py`); (3) A-class investigation seeded from sink
-records with `search_code`/`read_function` grep-relay (today: the
-tracer's read_file/search_code directives, D19); (4) a no-joern
-`get_forward_slice` fallback (repo-map symbols + import graph + grep) for
-the B-class worker, whose planner is already Joern-free; (5) metrics
-tier-labelled and never compared against full-pipeline targets. Chosen
-over transpiling Perl to a supported language (semantic chasm), over
-writing a Joern Perl frontend (cost far exceeds benchmark value), and
-over Semgrep `--lang generic` (no stronger than the regex scanner it
-would replace). Full design: `docs/perl-degraded-mode-design.md`.
+in via a per-target `engines` / `sink_detector` config key; (2) A-class
+investigation seeded from sink records with `search_code`/`read_function`
+grep-relay (today: the tracer's read_file/search_code directives, D19);
+(3) metrics tier-labelled and never compared against full-pipeline
+targets. Chosen over transpiling Perl to a supported language (semantic
+chasm), over writing a Joern Perl frontend (cost far exceeds benchmark
+value), and over Semgrep `--lang generic` (no stronger than the regex
+scanner it would replace). Full design: `docs/perl-degraded-mode-design.md`.
 
 ## Decided against / deferred
 

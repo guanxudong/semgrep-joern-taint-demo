@@ -14,9 +14,6 @@ Per target <name>, artifacts land in workspace/baseline/<name>/:
   snippets.jsonl       extract_chain_snippets.sc stdout (category A judge input)
   verdicts_a.jsonl     llm_judge_sink_chains.py verdicts
   judge_a_summary.txt  its stdout summary
-  ep_snippets.jsonl    extract_entrypoint_snippets.sc stdout (category B input)
-  verdicts_b.jsonl     llm_judge_entrypoints.py verdicts
-  judge_b_summary.txt  its stdout summary
 
 Aggregate metrics go to workspace/baseline/baseline.json.
 
@@ -28,18 +25,16 @@ Usage:
     python3 agent/run_baseline.py --compare [summary.json]  # regression gate
 
 Regression gate (--compare): compares an agent batch run's
-summary.json (A-class, run_trace) or summary_b.json (B-class,
-run_worker) — auto-detected by content — (default: the latest
+summary.json (run_trace) (default: the latest
 workspace/agent-reports/*/summary*.json) against this frozen baseline. Exit
 code is non-zero when any compared target's recall drops below the baseline
-(judge_a for A summaries, judge_b for B summaries) or a NEW safe-sample
-false positive appears (FP ids already present in the baseline are
-tolerated).
+(judge_a) or a NEW safe-sample false positive appears (FP ids already
+present in the baseline are tolerated).
 
 Gate semantics:
   PASS  target compared, no regression
   SKIP  target has no comparable baseline (e.g. frozen with --skip-llm, so
-        judge_a/judge_b is empty) or the dimension's data is missing —
+        judge_a is empty) or the dimension's data is missing —
         never counted as a regression; --require-baseline turns SKIP into FAIL
   FAIL  regression (recall drop / new safe FP / over budget / leak)
 
@@ -86,7 +81,6 @@ GT_NAMES = {"ground_truth.json", "GROUND_TRUTH.md"}
 _ARTIFACTS = (
     ("chains", "chains.jsonl", "chains.jsonl"),
     ("snippets", "snippets.jsonl", "snippets.jsonl"),
-    ("ep_snippets", "ep_snippets.jsonl", "entrypoint_snippets.jsonl"),
 )
 
 # Files whose content defines the deterministic stage + the scrubber; a
@@ -279,8 +273,7 @@ def collect_provenance(names: list[str]) -> dict:
         "joern": _joern_fingerprint(),
         "judge_scripts": {
             p: _sha256_file(REPO / p) for p in (
-                "scripts/llm_judge_sink_chains.py",
-                "scripts/llm_judge_entrypoints.py")},
+                "scripts/llm_judge_sink_chains.py",)},
         "engine_files": {str(p.relative_to(REPO)): _sha256_file(p)
                          for p in _engine_files()},
         "targets": {n: _target_state(n, BASELINE_DIR / n) for n in names},
@@ -320,8 +313,7 @@ def _classify(base_prov: dict, cur_prov: dict, name: str) -> list[str]:
     b_t = (base_prov.get("targets") or {}).get(name, {})
     c_t = (cur_prov.get("targets") or {}).get(name, {})
     for key, label in (("tree_sha", "CODE_CHANGED"),
-                       ("snippets_sha", "SNIPPET_CHANGED(A)"),
-                       ("ep_snippets_sha", "SNIPPET_CHANGED(B)"),
+                       ("snippets_sha", "SNIPPET_CHANGED"),
                        ("chains_sha", "CHAINS_CHANGED")):
         b, c = b_t.get(key), c_t.get(key)
         if b and c and b != c:
@@ -443,11 +435,6 @@ def run_target(name: str, cfg: dict, force: bool, skip_llm: bool) -> dict:
          ["joern", "--script", "analysis/joern/extract_chain_snippets.sc", str(cpg)],
          env={"SINKS_FILE": str(sinks), "SRC_ROOT": tree}, stdout_to=snippets)
 
-    ep_snippets = d / "ep_snippets.jsonl"
-    step(ep_snippets, force, run,
-         ["joern", "--script", "analysis/joern/extract_entrypoint_snippets.sc", str(cpg)],
-         env={"SRC_ROOT": tree}, stdout_to=ep_snippets)
-
     if not skip_llm:
         verdicts_a = d / "verdicts_a.jsonl"
         summary_a = d / "judge_a_summary.txt"
@@ -456,19 +443,12 @@ def run_target(name: str, cfg: dict, force: bool, skip_llm: bool) -> dict:
                  "--snippets", str(snippets), "--ground-truth", gt,
                  "-o", str(verdicts_a)], stdout_to=summary_a, timeout=7200)
 
-        verdicts_b = d / "verdicts_b.jsonl"
-        summary_b = d / "judge_b_summary.txt"
-        if not (verdicts_b.exists() and summary_b.exists()) or force:
-            run(["uv", "run", "scripts/llm_judge_entrypoints.py",
-                 "--snippets", str(ep_snippets), "--ground-truth", gt,
-                 "-o", str(verdicts_b)], stdout_to=summary_b, timeout=7200)
-
     return collect_metrics(d)
 
 
 def collect_metrics(d: Path) -> dict:
     """Recompute the summary numbers from on-disk artifacts."""
-    metrics: dict = {"chains": {}, "judge_a": {}, "judge_b": {}}
+    metrics: dict = {"chains": {}, "judge_a": {}}
 
     report = d / "chain_report.jsonl"
     if report.exists():
@@ -479,16 +459,11 @@ def collect_metrics(d: Path) -> dict:
                 counts[json.loads(line)["status"]] = counts.get(json.loads(line)["status"], 0) + 1
         metrics["chains"] = counts
 
-    for kind, fname, recall_key in (
-        ("judge_a", "judge_a_summary.txt", "category A"),
-        ("judge_b", "judge_b_summary.txt", "category B"),
-    ):
-        f = d / fname
-        if not f.exists():
-            continue
+    f = d / "judge_a_summary.txt"
+    if f.exists():
         text = f.read_text()
         m = {"recall": None, "safe_fp": [], "llm_errors": None}
-        r = re.search(rf"Recall {re.escape(recall_key)}[^:]*:\s+(\S+)", text)
+        r = re.search(r"Recall category A[^:]*:\s+(\S+)", text)
         if r:
             m["recall"] = r.group(1)
         fp = re.search(r"Safe-sample false positives[^:]*:\s+(.+)", text)
@@ -498,7 +473,7 @@ def collect_metrics(d: Path) -> dict:
         if t:
             m.update(tp=int(t[1]), fn=int(t[2]), fp=int(t[3]), tn=int(t[4]),
                      llm_errors=int(t[5]))
-        metrics[kind] = m
+        metrics["judge_a"] = m
     return metrics
 
 
@@ -508,36 +483,23 @@ def _parse_recall(recall: str | None) -> tuple[int, int] | None:
     return (int(m[1]), int(m[2])) if m else None
 
 
-def _is_b_summary(summary: dict) -> bool:
-    results = summary.get("targets", summary)
-    return any("recall_B" in r for r in results.values() if isinstance(r, dict))
-
-
-def _latest_summary(b_mode: bool | None = None) -> Path:
-    """Newest batch summary; with b_mode, the newest of that shape (A/B
-    summaries are interleaved in the same directory)."""
+def _latest_summary() -> Path:
+    """Newest batch summary."""
     root = REPORT_ROOT
     candidates = sorted(root.glob("*/summary*.json"),
                         key=lambda p: p.stat().st_mtime)
-    if b_mode is not None:
-        same = [p for p in candidates
-                if _is_b_summary(json.loads(p.read_text())) is b_mode]
-        candidates = same
     if not candidates:
         sys.exit(f"no agent batch summary found under {root} "
-                 "(run: uv run agent/run_trace.py --target all or "
-                 "uv run agent/run_worker.py --target all)")
+                 "(run: uv run agent/run_trace.py --target all)")
     return candidates[-1]
 
 
-def _previous_summary(summary_path: Path, b_mode: bool) -> Path | None:
-    """The batch summary immediately before `summary_path` of the same shape —
-    the only honest token baseline, since the frozen judge baseline is a
-    different pipeline (1 call per chain vs a full agent investigation)."""
+def _previous_summary(summary_path: Path) -> Path | None:
+    """The batch summary immediately before `summary_path` — the only honest
+    token baseline, since the frozen judge baseline is a different pipeline
+    (1 call per chain vs a full agent investigation)."""
     root = REPORT_ROOT
-    same = [p for p in sorted(root.glob("*/summary*.json"),
-                              key=lambda p: p.stat().st_mtime)
-            if _is_b_summary(json.loads(p.read_text())) is b_mode]
+    same = sorted(root.glob("*/summary*.json"), key=lambda p: p.stat().st_mtime)
     prior = [p for p in same if p.stat().st_mtime < summary_path.stat().st_mtime]
     return prior[-1] if prior else None
 
@@ -549,25 +511,16 @@ def compare_with_baseline(summary_path: Path, *, require_baseline: bool = False,
                           forbid_leak: bool = False) -> int:
     """Regression gate, extended with provenance + budget dimensions.
 
-    Auto-detects the summary shape — A-class summary.json (run_trace) or
-    B-class summary_b.json (run_worker). Per target: FAIL on a recall drop
-    below the frozen baseline, a NEW safe-sample FP, a confirmed-rate floor,
-    a token overrun vs the previous batch of the same shape, or a recorded
-    ground-truth leak. SKIP (never a regression) when the comparison is not
-    possible — a target frozen with --skip-llm has no judge baseline, and
-    `require_baseline` promotes those to FAIL."""
+    Per target: FAIL on a recall drop below the frozen baseline, a NEW
+    safe-sample FP, a confirmed-rate floor, a token overrun vs the previous
+    batch, or a recorded ground-truth leak. SKIP (never a regression) when
+    the comparison is not possible — a target frozen with --skip-llm has no
+    judge baseline, and `require_baseline` promotes those to FAIL."""
     baseline = _read_baseline()
     base_targets = baseline["targets"]
     base_prov = baseline.get("provenance") or {}
     summary = json.loads(summary_path.read_text())
     results = summary.get("targets", summary)  # tolerate a bare target dict
-
-    b_mode = _is_b_summary(summary)
-    judge_key = "judge_b" if b_mode else "judge_a"
-    recall_hit_key = "recall_B_hit" if b_mode else "recall_A_hit"
-    recall_str_key = "recall_B" if b_mode else "recall_A"
-    fp_key = "safe_fp_b" if b_mode else "safe_fp"
-    label = "B" if b_mode else "A"
 
     # provenance of the run under test: same helpers, agent-cache artifacts
     cur_prov = dict(base_prov)
@@ -576,25 +529,24 @@ def compare_with_baseline(summary_path: Path, *, require_baseline: bool = False,
                                 for p in _engine_files()}
     cur_prov["judge_scripts"] = {
         p: _sha256_file(REPO / p) for p in (
-            "scripts/llm_judge_sink_chains.py",
-            "scripts/llm_judge_entrypoints.py")}
+            "scripts/llm_judge_sink_chains.py",)}
     cur_prov["targets"] = {
         n: _target_state(n, AGENT_CACHE / n, cache_names=True)
         for n in results if (AGENT_CACHE / n).exists()}
 
-    # token dimension: vs the previous batch of the same shape
+    # token dimension: vs the previous batch
     cost_ref = cost_baseline
     if max_token_delta is not None and cost_ref is None:
-        cost_ref = _previous_summary(summary_path, b_mode)
+        cost_ref = _previous_summary(summary_path)
     cost_tokens = (json.loads(cost_ref.read_text()).get("targets", {})
                    if cost_ref else {})
 
-    log(f"comparing {summary_path} ({label}-class) against {BASELINE_FILE}")
+    log(f"comparing {summary_path} (A-class) against {BASELINE_FILE}")
     if max_token_delta is not None:
         log(f"cost baseline: {cost_ref or 'none (cost dimension skipped)'}")
 
     failed = skipped = 0
-    print(f"\n{'target':<24} {f'{label} recall (agent vs baseline)':<30} "
+    print(f"\n{'target':<24} {'A recall (agent vs baseline)':<30} "
           f"{'safe FP':<26} {'gate':<6} why")
     for name, res in results.items():
         base = base_targets.get(name)
@@ -605,33 +557,32 @@ def compare_with_baseline(summary_path: Path, *, require_baseline: bool = False,
             status, why = ("FAIL", [f"run error: {str(res['error'])[:60]}"])
         else:
             core_fail = False
-            b_recall = _parse_recall(base.get(judge_key, {}).get("recall"))
-            hit = res.get(recall_hit_key)
-            recall_txt = (f"{res.get(recall_str_key, '?')} vs "
-                          f"{base.get(judge_key, {}).get('recall', '?')}")
+            b_recall = _parse_recall(base.get("judge_a", {}).get("recall"))
+            hit = res.get("recall_A_hit")
+            recall_txt = (f"{res.get('recall_A', '?')} vs "
+                          f"{base.get('judge_a', {}).get('recall', '?')}")
             if b_recall is None:
                 # no comparable baseline for this class (--skip-llm freeze)
                 status = "FAIL" if require_baseline else "SKIP"
-                why = [f"no {judge_key} baseline"]
+                why = ["no judge_a baseline"]
             elif hit is None:
                 status, why = "SKIP", ["no recall in summary"]
             elif hit < b_recall[0]:
                 status = "FAIL"
                 core_fail = True
-                why = [f"{label} recall dropped {b_recall[0]} -> {hit}"]
+                why = [f"A recall dropped {b_recall[0]} -> {hit}"]
             else:
                 status = "PASS"
 
             known_fp = set(base.get("judge_a", {}).get("safe_fp", []))
-            known_fp |= set(base.get("judge_b", {}).get("safe_fp", []))
-            new_fp = [f for f in (res.get(fp_key) or []) if f not in known_fp]
-            fp_txt = str(res.get(fp_key) or [])[:24]
+            new_fp = [f for f in (res.get("safe_fp") or []) if f not in known_fp]
+            fp_txt = str(res.get("safe_fp") or [])[:24]
             if new_fp and status != "SKIP":
                 status = "FAIL"
                 core_fail = True
                 why.append(f"new safe FP: {new_fp}")
             elif new_fp:
-                why.append(f"new safe FP (uncompared): {new_fp}")
+                why.append("new safe FP (uncompared): {new_fp}")
 
             # confirmed-rate floor (deterministic stage of the run under test)
             if min_confirmed_rate is not None:
@@ -674,10 +625,10 @@ def compare_with_baseline(summary_path: Path, *, require_baseline: bool = False,
 
         failed += status == "FAIL"
         skipped += status == "SKIP"
-        recall_txt = (f"{res.get(recall_str_key, '—')} vs "
-                      f"{base.get(judge_key, {}).get('recall', '—')}"
+        recall_txt = (f"{res.get('recall_A', '—')} vs "
+                      f"{base.get('judge_a', {}).get('recall', '—')}"
                       if base else "—")
-        fp_txt = str((res.get(fp_key) if base else None) or [])[:24]
+        fp_txt = str((res.get("safe_fp") if base else None) or [])[:24]
         print(f"{name:<24} {recall_txt:<30} {fp_txt:<26} {status:<6} "
               + ("; ".join(why) if why else ""))
 
@@ -710,9 +661,8 @@ def main() -> int:
                     help="only recompute baseline.json from existing artifacts")
     ap.add_argument("--compare", nargs="?", const="", default=None,
                     metavar="SUMMARY_JSON",
-                    help="M5/M8 regression gate: compare an agent batch "
-                         "summary.json (A-class) or summary_b.json "
-                         "(B-class) (default: latest under "
+                    help="M5 regression gate: compare an agent batch "
+                         "summary.json (default: latest under "
                          "workspace/agent-reports/) against the frozen "
                          "baseline; non-zero exit on recall drop or new "
                          "safe-sample FP")
@@ -796,10 +746,9 @@ def main() -> int:
     log(f"baseline written to {BASELINE_FILE}")
 
     for name, m in summary.items():
-        ch, ja, jb = m.get("chains", {}), m.get("judge_a", {}), m.get("judge_b", {})
+        ch, ja = m.get("chains", {}), m.get("judge_a", {})
         print(f"{name:<15} chains {ch.get('CONFIRMED', '-')}/{ch.get('total', '-')}"
-              f" CONFIRMED | A recall {ja.get('recall', '-')} FP {ja.get('safe_fp', '-')}"
-              f" | B recall {jb.get('recall', '-')} FP {jb.get('safe_fp', '-')}")
+              f" CONFIRMED | A recall {ja.get('recall', '-')} FP {ja.get('safe_fp', '-')}")
     return 1 if any("error" in m for m in summary.values()) else 0
 
 

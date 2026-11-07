@@ -311,10 +311,6 @@ cpg.method.nameExact("data/db.py:<module>.query_unsafe").caller.l   // → 空�
 
 ## 7. 想再深入
 
-- `analysis/joern/find_entrypoints.sc`：entrypoints 字典的独立版，各语言的入口识别
-  写法都在里面（Java 靠注解节点，JS 靠 route 调用 + METHOD_REF）。
-- `analysis/joern/forward_from_entrypoints.sc` 与 `extract_entrypoint_snippets.sc`：
-  方向相反（入口向下），是 category B 流程的零件。
 - joern 官方查询文档：`reachableByFlows`、`.caller`、`.ast` 等的完整语义见
   https://docs.joern.io/traversal-basics/ 。
 - 前端能力的边界决定了图的质量：`analysis/LIMITATIONS.md` §1–2 记录了本仓库实测到的

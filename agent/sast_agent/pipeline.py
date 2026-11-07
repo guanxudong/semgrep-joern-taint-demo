@@ -264,29 +264,6 @@ def get_chain_snippets(target: str, sink_key: str | None = None,
     return records
 
 
-def get_entrypoint_snippets(target: str, force: bool = False) -> list[dict]:
-    """extract_entrypoint_snippets.sc -> per-entrypoint slice records (cached).
-    Records: {"entrypoint": {route, method, file, line}, "callees": [...],
-    "snippets": [{function, file, start_line, end_line, code}, ...]} — the
-    handler plus its forward-reachable callees, for category-B review ."""
-    cfg = _prepare_tree(target)
-    cpg = ensure_cpg(target, force=force)
-    out = config.cache_dir(target) / "entrypoint_snippets.jsonl"
-
-    if not out.exists() or force:
-        _run(["joern", "--script", "analysis/joern/extract_entrypoint_snippets.sc",
-              str(cpg)],
-             env={"SRC_ROOT": cfg["tree"]}, stdout_to=out)
-
-    records = []
-    for line in out.read_text().splitlines():
-        line = line.strip()
-        if not line.startswith("{"):
-            continue
-        records.append(json.loads(line))
-    return records
-
-
 def screen(target: str, force: bool = False) -> list[InvestigationBrief]:
     """Orchestrate the deterministic screening and classify each sink's gap
     (gap classification): no chains -> GAP_NO_CHAIN; chains but taint not confirmed

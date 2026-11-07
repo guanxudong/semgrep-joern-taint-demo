@@ -2,8 +2,8 @@
 
 SastTools wraps one benchmark target; each method is a thin, fact-only
 wrapper over the deterministic pipeline (pipeline.py), ripgrep, disk slices,
-or parameterized Joern query templates. The agents (tracer, worker,
-verifier) call these through pydantic-ai tool registration or directly.
+or parameterized Joern query templates. The agents (tracer, verifier) call
+these through pydantic-ai tool registration or directly.
 All writes are confined to the instance's cache dir; targets/ is read-only
 and ground-truth files are refused everywhere (red line).
 
@@ -19,8 +19,7 @@ import sys
 from pathlib import Path
 
 from . import config, pipeline
-from .contracts import (B_VULN_TYPES, BFinding, Hypothesis, Sink,
-                        TaxonomyEntry)
+from .contracts import Sink
 from .scrub import scrub, scrub_dicts
 
 REPO = config.REPO
@@ -28,7 +27,6 @@ REPO = config.REPO
 # Red line: never readable through any tool.
 GROUND_TRUTH_NAMES = {"ground_truth.json", "GROUND_TRUTH.md"}
 
-REPO_MAP_MAX_CHARS = 4000
 SEARCH_MAX_LINES = 100
 JOERN_QUERY_MAX_ROWS = 50
 
@@ -152,18 +150,6 @@ class SastTools:
 
     # ---- pipeline-backed tools (facts from the deterministic screening) ----
 
-    def get_repo_map(self, force: bool = False) -> str:
-        """tree-sitter repo map JSON (truncated to ~4000 chars)."""
-        md = self.cache_dir / "REPO_MAP.md"
-        js = self.cache_dir / "repo_map.json"
-        if not js.exists() or force:
-            pipeline._run(["uv", "run", "scripts/repo_map.py", self.cfg["tree"],
-                           "-o", str(md), "--json", str(js)])
-        text = js.read_text()
-        if len(text) > REPO_MAP_MAX_CHARS:
-            text = text[:REPO_MAP_MAX_CHARS] + "\n... [truncated]"
-        return text
-
     def run_semgrep(self, force: bool = False) -> list[dict]:
         """Semgrep sink list as dicts (Sink.model_dump())."""
         return [s.model_dump() for s in pipeline.run_semgrep(self.target, force=force)]
@@ -275,119 +261,3 @@ class SastTools:
         self._joern_failures = 0
         return _parse_json_lines(proc.stdout, JOERN_QUERY_MAX_ROWS)
 
-    def list_entrypoints(self, force: bool = False) -> list[dict]:
-        """HTTP entrypoint enumeration (find_entrypoints.sc, cached)."""
-        out = self.cache_dir / "entrypoints.jsonl"
-        if not out.exists() or force:
-            cpg = pipeline.ensure_cpg(self.target)
-            stdout = pipeline._run(
-                ["joern", "--script", "analysis/joern/find_entrypoints.sc", str(cpg)])
-            out.write_text(stdout)
-        return _parse_json_lines(out.read_text(), 500)
-
-    # ---- category-B planner tools (M6) ----
-
-    def get_forward_slice(self, entrypoint: str) -> dict | str:
-        """Handler + forward-reachable callee source for one entrypoint
-        (extract_entrypoint_snippets.sc). `entrypoint` may be a method
-        fullName, a route label ("GET /users/<id>"), or a bare function
-        name. Ground-truth marker comments are stripped before returning."""
-        records = pipeline.get_entrypoint_snippets(self.target)
-
-        def ep_of(rec: dict) -> dict:
-            return rec.get("entrypoint", {})
-
-        # 1) method fullName exact, then suffix ("...users.py:<module>.get_user")
-        hit = [r for r in records if ep_of(r).get("method") == entrypoint]
-        if not hit:
-            hit = [r for r in records
-                   if ep_of(r).get("method", "").endswith(entrypoint)]
-        # 2) route label (case-insensitive, spacing-insensitive)
-        if not hit:
-            want = " ".join(entrypoint.split()).upper()
-            hit = [r for r in records
-                   if " ".join(ep_of(r).get("route", "").split()).upper() == want]
-        # 3) bare function name (last dotted segment of the fullName)
-        if not hit:
-            hit = [r for r in records
-                   if ep_of(r).get("method", "").rsplit(".", 1)[-1] == entrypoint]
-        if not hit:
-            known = [f"{ep_of(r).get('method', '?')} ({ep_of(r).get('route', '?')})"
-                     for r in records[:20]]
-            return ("ERROR: no forward slice for entrypoint "
-                    f"{entrypoint!r}. Available (first 20):\n" + "\n".join(known))
-        rec = hit[0]
-        scrub_dicts(rec.get("snippets", []), where="tools.get_forward_slice",
-                    target=self.target)
-        return rec
-
-    def submit_hypotheses(self, hypotheses: list[dict],
-                          coverage: list[dict] | None = None) -> dict:
-        """Validate and enqueue category-B hypotheses . Each entry must
-        satisfy the Hypothesis contract; invalid entries are reported, not
-        fatal. Appends to cache_dir/hypotheses.jsonl.
-
-        `coverage` is the taxonomy coverage checklist (完整性约束, M8):
-        one TaxonomyEntry per class. Validated separately — a bad checklist
-        never blocks the hypothesis queue (recall first); on failure a
-        mechanical fallback is derived from the accepted hypotheses and
-        flagged "derived"."""
-        accepted, rejected = [], []
-        for i, h in enumerate(hypotheses):
-            try:
-                accepted.append(Hypothesis.model_validate(h))
-            except Exception as e:
-                rejected.append({"index": i, "error": str(e)[:300]})
-        out = self.cache_dir / "hypotheses.jsonl"
-        with open(out, "a") as fh:
-            for h in accepted:
-                fh.write(h.model_dump_json() + "\n")
-        result = {"ok": not rejected, "accepted": len(accepted),
-                  "rejected": rejected, "written_to": str(out)}
-        if coverage is not None:
-            checklist = self._validate_coverage(coverage, accepted)
-            cov_path = self.cache_dir / "taxonomy_checklist.json"
-            cov_path.write_text(json.dumps(checklist, indent=2,
-                                           ensure_ascii=False) + "\n")
-            result["checklist_written_to"] = str(cov_path)
-            result["checklist_derived"] = checklist.get("derived", False)
-        return result
-
-    @staticmethod
-    def _validate_coverage(coverage: list[dict],
-                           accepted: list[Hypothesis]) -> dict:
-        """Validate the planner's taxonomy checklist; tolerate a partial one
-        by auto-filling the missing classes from the queue (flagged
-        "derived"), so a sloppy checklist never blocks the hypotheses."""
-        try:
-            entries = [TaxonomyEntry.model_validate(e) for e in coverage]
-        except Exception:
-            entries = []
-        seen = {e.vuln_type for e in entries}
-        derived = False
-        if seen != set(B_VULN_TYPES):
-            derived = True
-            by_type: dict[str, list[str]] = {t: [] for t in B_VULN_TYPES}
-            for h in accepted:
-                by_type[h.vuln_type].append(h.route)
-            entries += [TaxonomyEntry(vuln_type=t, routes_examined=0,
-                                      submitted=by_type[t])
-                        for t in B_VULN_TYPES if t not in seen]
-        return {"derived": derived,
-                "entries": [e.model_dump() for e in entries]}
-
-    # ---- finding submission ----
-
-    def submit_b_finding(self, finding: dict) -> dict:
-        """Validate and record a category-B BFinding; ends the current
-        hypothesis's investigation. The tool call itself is the submission
-        channel; run_worker.py owns the final report-dir persistence."""
-        try:
-            f = BFinding.model_validate(finding)
-        except Exception as e:
-            return {"ok": False, "error": f"invalid BFinding: {e}"}
-        out = self.cache_dir / "findings_b.jsonl"
-        with open(out, "a") as fh:
-            fh.write(f.model_dump_json() + "\n")
-        return {"ok": True, "route": f.hypothesis.route,
-                "written_to": str(out)}

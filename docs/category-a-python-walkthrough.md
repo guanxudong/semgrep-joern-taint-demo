@@ -361,14 +361,16 @@ or allow-list anywhere on the path..."
    on the direct path."
 ```
 
-**脚本最后的自动计分**（对照 `ground_truth.json`）：
+**脚本最后的自动计分**（对照 `ground_truth.json` 的 A 类条目）：
 
 ```
 Recall category A (sink-based):  10/10 = 100%
-Recall category B (non-sink):    0/7 = 0%   (sink pipeline 管不到，符合预期)
 Safe-sample false positives:     none        (py-safe-01/03/04 全部正确判安全)
-TP=10 FN=7 FP=0 TN=5 LLM errors=0
+TP=10 FN=0 FP=0 TN=5 LLM errors=0
 ```
+
+（当前 pipeline 只消费 A 类条目；ground truth 中的 B 类条目保留待后续
+B 类检测立项，不参与本次计分。）
 
 **你刚才看到了什么**：
 

@@ -88,7 +88,7 @@ val jspEntrypoints: Map[String, String] =
     m.fullName -> s"${m.typeDecl.name.headOption.getOrElse("?")} \"/$base.jsp\""
   }.toMap
 
-// ---- entrypoint method fullNames (same detection as find_entrypoints.sc) ----
+// ---- entrypoint method fullNames ----
 val entrypoints: Map[String, String] = (lang match {
   case "java" =>
     (cpg.method.where(_.annotation.name(".*(Get|Post|Put|Delete|Patch)Mapping")).l.map { m =>

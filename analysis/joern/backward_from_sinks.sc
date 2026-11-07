@@ -20,7 +20,7 @@ import io.shiftleft.codepropertygraph.generated.nodes.Method
 import java.nio.file.{Files, Paths}
 
 // Sink name table, aligned with analysis/rules/sinks-*.yml (keep in sync with
-// taint_confirm.sc / forward_from_entrypoints.sc). Must also cover constructor
+// taint_confirm.sc). Must also cover constructor
 // sinks (`new Template`, `new FileInputStream`) for name-first matching.
 val sinkNames = Map(
   "python" -> "^(execute|executemany|system|popen|eval|exec|loads|load|render_template_string|from_string|fromstring|parse|parseString|XMLParser|send_file|open)$",
@@ -72,7 +72,7 @@ val jspEntrypoints: Map[String, String] =
     m.fullName -> s"${m.typeDecl.name.headOption.getOrElse("?")} \"/$base.jsp\""
   }.toMap
 
-// ---- entrypoint method fullNames (same detection as find_entrypoints.sc) ----
+// ---- entrypoint method fullNames ----
 val entrypoints: Map[String, String] = (lang match {
   case "java" =>
     (cpg.method.where(_.annotation.name(".*(Get|Post|Put|Delete|Patch)Mapping")).l.map { m =>

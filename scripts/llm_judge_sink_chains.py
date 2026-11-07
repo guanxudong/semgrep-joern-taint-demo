@@ -297,6 +297,8 @@ def score(verdicts: list[dict], ground_truth: list[dict]) -> dict:
     errors = [v for v in verdicts if v["status"] == "ERROR"]
     rows, tp, fn, fp, tn = [], 0, 0, 0, 0
     for entry in ground_truth:
+        if entry.get("category") != "A":
+            continue  # A-only pipeline: category-B GT entries are not scored
         vt = entry.get("vuln_type", "")
         matches = [
             v for v in verdicts
@@ -321,14 +323,11 @@ def score(verdicts: list[dict], ground_truth: list[dict]) -> dict:
             "chains_matched": len(matches),
             "max_confidence": max((m.get("confidence", 0) for m in vuln_hits), default=0),
         })
-    cat_a = [r for r in rows if r["category"] == "A" and r["expected"] == "vulnerable"]
-    cat_b = [r for r in rows if r["category"] == "B" and r["expected"] == "vulnerable"]
+    cat_a = [r for r in rows if r["expected"] == "vulnerable"]
     return {
         "rows": rows,
         "n_errors": len(errors),
         "recall_A": _recall(cat_a),
-        "recall_B": _recall(cat_b),
-        "recall_all_vuln": _recall([r for r in rows if r["expected"] == "vulnerable"]),
         "safe_fp": [r["id"] for r in rows if r["expected"] == "safe" and r["verdict"] == "FP"],
         "tp": tp, "fn": fn, "fp": fp, "tn": tn,
     }
@@ -426,9 +425,8 @@ def main() -> int:
     for r in report["rows"]:
         print(f"{r['id']:<28} {r['category']:<3} {r['vuln_type']:<17} {r['expected']:<10} {r['verdict']}")
     print(f"\nRecall category A (sink-based):  {report['recall_A']}")
-    print(f"Recall category B (non-sink):    {report['recall_B']}  (out of sink-pipeline scope)")
-    print(f"Recall all vulnerable:           {report['recall_all_vuln']}")
-    print(f"Safe-sample false positives:     {report['safe_fp'] or 'none'}")
+    print("Safe-sample false positives:     "
+          + (f"{report['safe_fp']}" if report['safe_fp'] else "none"))
     print(f"TP={report['tp']} FN={report['fn']} FP={report['fp']} TN={report['tn']} "
           f"LLM errors={report['n_errors']}")
     return 0

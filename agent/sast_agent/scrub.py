@@ -1,8 +1,8 @@
 """Ground-truth label scrubbing + leak assertion (red line).
 
 SINGLE implementation, shared by the agent tool layer (`tools.py`,
-`worker.py`, `verifier.py`) and both LLM judges
-(`scripts/llm_judge_sink_chains.py`, `scripts/llm_judge_entrypoints.py`).
+`verifier.py`) and the LLM judge
+(`scripts/llm_judge_sink_chains.py`).
 Before this module the same regex existed in four divergent copies: the
 agent copies dropped the tag anywhere on a line (read_function prefixes
 lines with `  12: `, search_code returns `path:12:content`) while the

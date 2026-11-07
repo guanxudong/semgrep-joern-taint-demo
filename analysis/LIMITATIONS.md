@@ -52,10 +52,9 @@ is §4 (agent/LLM-layer limitations); the roadmap lives in
   to force results.
   Update (2026-07): the CALL-CHAIN side is fixed — the root cause was call
   NODES dropped for `_svc.Method()` nested inside `Ok(...)`; repaired with
-  a source-text + field-type fallback in the two backward scripts and in
-  `extract_entrypoint_snippets.sc` (forward direction; see DECISIONS.md
-  D7), taking cs A recall to 10/10. This bullet now concerns only
-  `taint_confirm.sc` dataflow confirmation, which is still open.
+  a source-text + field-type fallback in the backward scripts (see
+  DECISIONS.md D7), taking cs A recall to 10/10. This bullet now concerns
+  only `taint_confirm.sc` dataflow confirmation, which is still open.
 
 Update (2026-09-10, both bullets above): the remaining dataflow-side gaps
 were dropped as work items — the agent layer (M3 drill-down + M4 verifier)
@@ -126,14 +125,9 @@ PROGRESS.md entries (git history).
   `append` assembly; (3) stale agent-cache sink lists had to be cleared
   manually (`run_baseline.py` caches per-stage artifacts, `--force` only
   covers the baseline dir). After the fixes both targets sit at 10/10
-  (judge + tracer, gate PASS). Still open: route-shape checks —
-  `compare_repo_maps.py --check` and the M6 planner's route-coverage check
-  compare HTTP-style routes, so `MSG <subject>` / `CMD <cmd>` / `FILE`
-  triggers score as route misses (function hits still match; measured
-  16/22 and 7/22 route hits on the two new engine-backed targets);
-  pysrc2cpg's DFG loses dict/subscript flows, so python-clearing-worker
-  taint confirm sits at 5/16 — the tracer is expected to continue those
-  chains at runtime.
+  (judge + tracer, gate PASS). pysrc2cpg's DFG loses dict/subscript flows,
+  so python-clearing-worker taint confirm sits at 5/16 — the tracer is
+  expected to continue those chains at runtime.
 
 - **Judgment-layer model drift.** DeepSeek endpoint drift has flipped
   verdicts (A-class FNs java-cmdi-01/02; safe-02 flipped to FP on 4
@@ -146,9 +140,6 @@ PROGRESS.md entries (git history).
   What is still missing: drift *within* a pinned model version (a silent
   endpoint change behind the same model name) is invisible to any hash —
   that is what M13.2's periodic judge-only re-run is for.
-- **Persistent known FP: safe-02 (all targets).** The ownership-checked
-  IDOR sample is FP'd by the B-class judge/worker on every target
-  (baseline-known, tolerated by the gate). Unsolved.
 - **Verifier asymmetry.** Adversarial review (attacker/defender) only runs
   on vulnerable verdicts — a not-vulnerable first pass gets no second
   look, so FNs have no safety net. The verifier also multiplies token
@@ -162,24 +153,20 @@ PROGRESS.md entries (git history).
   rule, and a vulnerable verdict carries `exploitable_chain` (index) so
   the finding the verifier reviews is anchored to the exploitable chain.
   The deeper asymmetry (negative verdicts unreviewed) remains open.
-- **Cost and budget truncation.** The B-class worker runs ~2M+ tokens per
-  target; WORKER_MAX_TOOL_CALLS=15 and per-investigation timeouts truncate
-  deep investigations and force LIKELY-with-gaps submissions. This is the
-  main precision ceiling as targets scale up. *Update 2026-10-04 (D16):*
+- **Cost and budget truncation.** Deep investigations hit the per-sink
+  wall-clock budget and can end LIKELY-with-gaps. This is the main
+  precision ceiling as targets scale up. *Update 2026-10-04 (D16):*
   cost is now measurable per run (`--max-token-delta`, and the funnel
   numbers M14.3 will collect), but nothing yet *reduces* it — that is
-  M14.2. *Update 2026-11-01 (M9 tracer):* the **A-class** path is rebuilt
-  as a state machine (`tracer.py`): the LLM fills one `TraceStep` per round
-  (no tool calls, no full-history resend), which cuts A-class token spend
-  by roughly an order of magnitude vs the investigator (single-sink
-  measurements: 7.3k tokens for a clean chain, 27.6k for a 4-directive
-  canary continuation, vs 0.6–1.0M per target before). The B-class worker
-  cost is untouched.
+  M14.2. *Update 2026-11-01 (M9 tracer):* the investigation path is
+  rebuilt as a state machine (`tracer.py`): the LLM fills one `TraceStep`
+  per round (no tool calls, no full-history resend), which cuts A-class
+  token spend by roughly an order of magnitude vs the investigator
+  (single-sink measurements: 7.3k tokens for a clean chain, 27.6k for a
+  4-directive canary continuation, vs 0.6–1.0M per target before).
 - **Hardcoded coverage assumptions.** Python entrypoint detection assumes
   a `(routes|api)/*.py` layout (widened for the enterprise pilot, D12);
-  the planner's trait→class mappings are framework-specific. New
-  layouts/frameworks need manual extension — the taxonomy checklist makes
-  unexamined routes visible but does not examine them.
+  new layouts/frameworks need manual rule extension.
 - **Benchmark hygiene is a class of issue, not a fixed bug.** Tool-output
   channels keep finding new GT-label leak paths (M7 acceptance:
   line-numbered rg output bypassed the anchored strip regex). *Update
@@ -233,11 +220,9 @@ the post-MVP roadmap (M9+) lives in `plan.md` at the repo root.
 - **The pipeline assumes both a Semgrep grammar and a Joern frontend per
   target language.** For a language missing both (e.g. Perl — absent from
   Semgrep's GA/beta/experimental lists, no Joern frontend), A-class screening
-  dies at CPG build (`ensure_cpg`) and the B-class worker at
-  `get_forward_slice`; only the tree-sitter repo map and the grep/read tools
-  survive. PHP is NOT such a case — Joern ships php2cpg (needs a local PHP
-  runtime) and Semgrep PHP is GA, so PHP would be a full-pipeline (tier-1)
-  addition if ever scheduled. Tiered strategy and the degraded agent-only
-  mode (tier 3) are designed, not implemented:
-  `docs/perl-degraded-mode-design.md`; decision: DECISIONS.md D10
-  (2026-09-14).
+  dies at CPG build (`ensure_cpg`); only the grep/read tools survive. PHP is
+  NOT such a case — Joern ships php2cpg (needs a local PHP runtime) and
+  Semgrep PHP is GA, so PHP would be a full-pipeline (tier-1) addition if
+  ever scheduled. Tiered strategy and the degraded agent-only mode (tier 3)
+  are designed, not implemented: `docs/perl-degraded-mode-design.md`;
+  decision: DECISIONS.md D10 (2026-09-14).
