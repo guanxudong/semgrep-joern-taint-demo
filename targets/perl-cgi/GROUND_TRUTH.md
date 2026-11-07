@@ -18,6 +18,9 @@ no-engine degraded mode, where only the LLM (and tree-sitter) reads the code.
 |----|------|-----|------|-----|-----------|-------|---------------|---------------|-------|
 | pl-sqli-01 | vuln | A | sqli | 89 | shallow | GET /users/search.pl | search.pl run | DB.pm query (`selectall_arrayref`) | search.pl → DB.pm |
 | pl-sqli-02 | vuln | A | sqli | 89 | deep | GET /users/lookup.pl | lookup.pl run | DB.pm query (`selectall_arrayref`) | lookup.pl → UserService.pm (field `_pending_name`) → DB.pm |
+| pl-sqli-03 | vuln | A | sqli | 89 | medium | GET /users/view.pl | view.pl run | DB.pm query (`selectall_arrayref`) | view.pl → UserService.pm → DB.pm |
+| pl-sqli-04 | vuln | A | sqli | 89 | shallow | POST /admin/delete.pl | delete.pl run | DB.pm execute (`do`) | delete.pl → DB.pm |
+| pl-sqli-05 | vuln | A | sqli | 89 | medium | POST /orders/withdraw.pl | withdraw.pl run | DB.pm execute (`do`) | withdraw.pl → OrderService.pm → DB.pm |
 | pl-xss-01 | vuln | A | xss | 79 | shallow | GET /render/hello.pl | hello.pl run | hello.pl run (HTML concat) | hello.pl |
 | pl-cmdi-01 | vuln | A | cmdi | 78 | shallow | GET /tools/ping.pl | ping.pl run | ping.pl run (`system`) | ping.pl |
 | pl-cmdi-02 | vuln | A | cmdi | 78 | deep | GET /tools/diagnose.pl | diagnose.pl run | ToolService.pm run_staged_diag (`system`) | diagnose.pl → ToolService.pm (field `_target`) |
@@ -44,4 +47,8 @@ Notes:
   (one flawed handler exhibiting two B-class weaknesses).
 - pl-auth-flaws-01 also covers `/auth/reset.pl` (predictable md5(username) token).
 - pl-business-logic-01 also covers `/orders/coupon.pl` (unlimited coupon reuse).
-- pl-broken-access-control-01 also covers `/admin/delete.pl` (no authorization).
+- pl-broken-access-control-01 also covers `/admin/delete.pl` (no
+  authorization; the interpolated DELETE is recorded separately as pl-sqli-04).
+- pl-sqli-03 records the SQL injection in `/users/view.pl` (pl-idor-01 covers
+  the same script); pl-sqli-05 records the one in `/orders/withdraw.pl`
+  (pl-race-condition-01 covers the same script).

@@ -11,6 +11,8 @@ Express route handlers are anonymous; "Entrypoint fn" names the semantic handler
 |----|------|-----|------|-----|-----------|-------|---------------|---------------|-------|
 | js-sqli-01 | vuln | A | sqli | 89 | shallow | GET /users/search | search | db/index.js query (`pool.query`) | users.js → db/index.js |
 | js-sqli-02 | vuln | A | sqli | 89 | deep | GET /users/lookup | lookup | db/index.js query (`pool.query`) | users.js → userService.js (field `pendingName`) → db/index.js |
+| js-sqli-03 | vuln | A | sqli | 89 | medium | GET /users/:id | getUser | db/index.js query (`pool.query`) | users.js → userService.js → db/index.js |
+| js-sqli-04 | vuln | A | sqli | 89 | shallow | DELETE /admin/users/:id | deleteUser | db/index.js query (`pool.query`) | admin.ts → db/index.js |
 | js-xss-01 | vuln | A | xss | 79 | shallow | GET /render/hello | hello | render.js hello (`res.send`) | render.js |
 | js-cmdi-01 | vuln | A | cmdi | 78 | shallow | GET /tools/ping | ping | tools.js ping (`exec`) | tools.js |
 | js-cmdi-02 | vuln | A | cmdi | 78 | deep | GET /tools/diagnose | diagnose | toolService.ts runStagedDiag (`exec`) | tools.js → toolService.ts (field `target`) |
@@ -37,6 +39,9 @@ Notes:
   (one flawed handler exhibiting two B-class weaknesses).
 - js-auth-flaws-01 also covers `/auth/reset` (predictable md5(username) token).
 - js-business-logic-01 also covers `/orders/coupon` (unlimited coupon reuse).
-- js-broken-access-control-01 also covers `DELETE /admin/users/:id`.
+- js-broken-access-control-01 also covers `DELETE /admin/users/:id` (missing
+  authorization; the concatenated DELETE is recorded separately as js-sqli-04).
+- js-sqli-03 records the SQL injection in `GET /users/:id`; js-idor-01 covers
+  the same handler for the missing ownership check.
 - JavaScript and TypeScript are intentionally mixed in one project; filter by
   file extension if you need per-language scoring.

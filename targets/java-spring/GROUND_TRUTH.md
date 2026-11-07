@@ -10,6 +10,8 @@ deep = 4+ hops and/or taint passed through an instance field.
 |----|------|-----|------|-----|-----------|-------|---------------|---------------|-------|
 | java-sqli-01 | vuln | A | sqli | 89 | shallow | GET /users/search | UserController.search | data/UserRepository.java queryUnsafe (`executeQuery`) | UserController → UserRepository |
 | java-sqli-02 | vuln | A | sqli | 89 | deep | GET /users/lookup | UserController.lookup | data/UserRepository.java queryUnsafe (`executeQuery`) | UserController → UserService (field `pendingName`) → UserRepository |
+| java-sqli-03 | vuln | A | sqli | 89 | medium | GET /users/{id} | UserController.getUser | data/UserRepository.java queryUnsafe (`executeQuery`) | UserController → UserService → UserRepository |
+| java-sqli-04 | vuln | A | sqli | 89 | shallow | DELETE /admin/users/{id} | AdminController.deleteUser | data/UserRepository.java executeUnsafe (`executeUpdate`) | AdminController → UserRepository |
 | java-xss-01 | vuln | A | xss | 79 | shallow | GET /render/hello | RenderController.hello | RenderController.hello (HTML concat) | RenderController |
 | java-cmdi-01 | vuln | A | cmdi | 78 | shallow | GET /tools/ping | ToolController.ping | ToolController.ping (`Runtime.exec`) | ToolController |
 | java-cmdi-02 | vuln | A | cmdi | 78 | deep | GET /tools/diagnose | ToolController.diagnose | utils/ExecUtil.java run (`Runtime.exec`) | ToolController → ToolService (field `target`) → ExecUtil |
@@ -36,4 +38,8 @@ Notes:
   (one flawed handler exhibiting two B-class weaknesses).
 - java-auth-flaws-01 also covers `/auth/reset` (predictable md5(username) token).
 - java-business-logic-01 also covers `/orders/coupon` (unlimited coupon reuse).
-- java-broken-access-control-01 also covers `DELETE /admin/users/{id}`.
+- java-broken-access-control-01 also covers `DELETE /admin/users/{id}`
+  (missing authorization; the concatenated DELETE is recorded separately as
+  java-sqli-04).
+- java-sqli-03 records the SQL injection in `GET /users/{id}`; java-idor-01
+  covers the same handler for the missing ownership check.

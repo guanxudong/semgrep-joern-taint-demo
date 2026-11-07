@@ -174,9 +174,12 @@ to benchmark an LLM + Semgrep + Joern SAST pipeline.
   --with "pydantic-ai-slim[openai]>=2.0.0" --with python-dotenv pytest
   tests -q`
   (scrubber + regression gate + tracer state machine, including the gate's
-  self-tests on fabricated summaries). No API key, no joern, no CPG needed.
-  Anything that can be checked without an LLM belongs here rather than in a
-  smoke script.
+  self-tests on fabricated summaries; `test_ground_truth.py` structurally
+  validates every target's `ground_truth.json` against its source — file/
+  function existence, framework route/trigger registration, cat-A sink+chain
+  resolution, cwe↔vuln_type map, and GROUND_TRUTH.md↔JSON id sync). No API
+  key, no joern, no CPG needed. Anything that can be checked without an LLM
+  belongs here rather than in a smoke script.
 
 ## Vulnerability taxonomy
 

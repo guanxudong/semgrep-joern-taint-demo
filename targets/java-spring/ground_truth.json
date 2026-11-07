@@ -6,9 +6,20 @@
     "cwe": 89,
     "expected": "vulnerable",
     "difficulty": "shallow",
-    "entrypoint": { "route": "GET /users/search", "file": "controllers/UserController.java", "function": "search" },
-    "sink": { "file": "data/UserRepository.java", "function": "queryUnsafe", "line_hint": "executeQuery" },
-    "chain": ["controllers/UserController.java", "data/UserRepository.java"],
+    "entrypoint": {
+      "route": "GET /users/search",
+      "file": "controllers/UserController.java",
+      "function": "search"
+    },
+    "sink": {
+      "file": "data/UserRepository.java",
+      "function": "queryUnsafe",
+      "line_hint": "executeQuery"
+    },
+    "chain": [
+      "controllers/UserController.java",
+      "data/UserRepository.java"
+    ],
     "notes": "SQL concatenated in the handler, executed one hop away via Statement.executeQuery."
   },
   {
@@ -18,9 +29,21 @@
     "cwe": 89,
     "expected": "vulnerable",
     "difficulty": "deep",
-    "entrypoint": { "route": "GET /users/lookup", "file": "controllers/UserController.java", "function": "lookup" },
-    "sink": { "file": "data/UserRepository.java", "function": "queryUnsafe", "line_hint": "executeQuery" },
-    "chain": ["controllers/UserController.java", "services/UserService.java", "data/UserRepository.java"],
+    "entrypoint": {
+      "route": "GET /users/lookup",
+      "file": "controllers/UserController.java",
+      "function": "lookup"
+    },
+    "sink": {
+      "file": "data/UserRepository.java",
+      "function": "queryUnsafe",
+      "line_hint": "executeQuery"
+    },
+    "chain": [
+      "controllers/UserController.java",
+      "services/UserService.java",
+      "data/UserRepository.java"
+    ],
     "notes": "Taint stored in UserService.pendingName instance field, read by findStaged(). Field-sensitive analysis required."
   },
   {
@@ -30,9 +53,19 @@
     "cwe": 79,
     "expected": "vulnerable",
     "difficulty": "shallow",
-    "entrypoint": { "route": "GET /render/hello", "file": "controllers/RenderController.java", "function": "hello" },
-    "sink": { "file": "controllers/RenderController.java", "function": "hello", "line_hint": "return \"<h1>Hello \"" },
-    "chain": ["controllers/RenderController.java"],
+    "entrypoint": {
+      "route": "GET /render/hello",
+      "file": "controllers/RenderController.java",
+      "function": "hello"
+    },
+    "sink": {
+      "file": "controllers/RenderController.java",
+      "function": "hello",
+      "line_hint": "return \"<h1>Hello \""
+    },
+    "chain": [
+      "controllers/RenderController.java"
+    ],
     "notes": "Reflected XSS via string concatenation into the HTML response body."
   },
   {
@@ -42,9 +75,19 @@
     "cwe": 78,
     "expected": "vulnerable",
     "difficulty": "shallow",
-    "entrypoint": { "route": "GET /tools/ping", "file": "controllers/ToolController.java", "function": "ping" },
-    "sink": { "file": "controllers/ToolController.java", "function": "ping", "line_hint": "Runtime.getRuntime().exec" },
-    "chain": ["controllers/ToolController.java"],
+    "entrypoint": {
+      "route": "GET /tools/ping",
+      "file": "controllers/ToolController.java",
+      "function": "ping"
+    },
+    "sink": {
+      "file": "controllers/ToolController.java",
+      "function": "ping",
+      "line_hint": "Runtime.getRuntime().exec"
+    },
+    "chain": [
+      "controllers/ToolController.java"
+    ],
     "notes": "Runtime.exec with direct string concatenation in the handler."
   },
   {
@@ -54,9 +97,21 @@
     "cwe": 78,
     "expected": "vulnerable",
     "difficulty": "deep",
-    "entrypoint": { "route": "GET /tools/diagnose", "file": "controllers/ToolController.java", "function": "diagnose" },
-    "sink": { "file": "utils/ExecUtil.java", "function": "run", "line_hint": "Runtime.getRuntime().exec" },
-    "chain": ["controllers/ToolController.java", "services/ToolService.java", "utils/ExecUtil.java"],
+    "entrypoint": {
+      "route": "GET /tools/diagnose",
+      "file": "controllers/ToolController.java",
+      "function": "diagnose"
+    },
+    "sink": {
+      "file": "utils/ExecUtil.java",
+      "function": "run",
+      "line_hint": "Runtime.getRuntime().exec"
+    },
+    "chain": [
+      "controllers/ToolController.java",
+      "services/ToolService.java",
+      "utils/ExecUtil.java"
+    ],
     "notes": "Taint stored in ToolService.target instance field, read by runStagedDiag(). Field-sensitive analysis required."
   },
   {
@@ -66,9 +121,21 @@
     "cwe": 22,
     "expected": "vulnerable",
     "difficulty": "medium",
-    "entrypoint": { "route": "GET /files/download", "file": "controllers/FileController.java", "function": "download" },
-    "sink": { "file": "utils/FileUtil.java", "function": "read", "line_hint": "Files.readAllBytes" },
-    "chain": ["controllers/FileController.java", "services/FileService.java", "utils/FileUtil.java"],
+    "entrypoint": {
+      "route": "GET /files/download",
+      "file": "controllers/FileController.java",
+      "function": "download"
+    },
+    "sink": {
+      "file": "utils/FileUtil.java",
+      "function": "read",
+      "line_hint": "Files.readAllBytes"
+    },
+    "chain": [
+      "controllers/FileController.java",
+      "services/FileService.java",
+      "utils/FileUtil.java"
+    ],
     "notes": "User-controlled name concatenated onto UPLOAD_DIR without normalization."
   },
   {
@@ -78,9 +145,19 @@
     "cwe": 94,
     "expected": "vulnerable",
     "difficulty": "shallow",
-    "entrypoint": { "route": "POST /tools/calc", "file": "controllers/ToolController.java", "function": "calc" },
-    "sink": { "file": "controllers/ToolController.java", "function": "calc", "line_hint": "engine.eval" },
-    "chain": ["controllers/ToolController.java"],
+    "entrypoint": {
+      "route": "POST /tools/calc",
+      "file": "controllers/ToolController.java",
+      "function": "calc"
+    },
+    "sink": {
+      "file": "controllers/ToolController.java",
+      "function": "calc",
+      "line_hint": "engine.eval"
+    },
+    "chain": [
+      "controllers/ToolController.java"
+    ],
     "notes": "ScriptEngine.eval on the request body."
   },
   {
@@ -90,9 +167,19 @@
     "cwe": 611,
     "expected": "vulnerable",
     "difficulty": "shallow",
-    "entrypoint": { "route": "POST /xml/parse", "file": "controllers/XmlController.java", "function": "parse" },
-    "sink": { "file": "controllers/XmlController.java", "function": "parse", "line_hint": "DocumentBuilder.parse" },
-    "chain": ["controllers/XmlController.java"],
+    "entrypoint": {
+      "route": "POST /xml/parse",
+      "file": "controllers/XmlController.java",
+      "function": "parse"
+    },
+    "sink": {
+      "file": "controllers/XmlController.java",
+      "function": "parse",
+      "line_hint": "DocumentBuilder.parse"
+    },
+    "chain": [
+      "controllers/XmlController.java"
+    ],
     "notes": "DocumentBuilderFactory without disabling DTD / external entities."
   },
   {
@@ -102,9 +189,19 @@
     "cwe": 502,
     "expected": "vulnerable",
     "difficulty": "medium",
-    "entrypoint": { "route": "POST /profile/import", "file": "controllers/ProfileController.java", "function": "importProfile" },
-    "sink": { "file": "controllers/ProfileController.java", "function": "importProfile", "line_hint": "readObject" },
-    "chain": ["controllers/ProfileController.java"],
+    "entrypoint": {
+      "route": "POST /profile/import",
+      "file": "controllers/ProfileController.java",
+      "function": "importProfile"
+    },
+    "sink": {
+      "file": "controllers/ProfileController.java",
+      "function": "importProfile",
+      "line_hint": "readObject"
+    },
+    "chain": [
+      "controllers/ProfileController.java"
+    ],
     "notes": "ObjectInputStream.readObject on base64-decoded request body."
   },
   {
@@ -114,9 +211,19 @@
     "cwe": 1336,
     "expected": "vulnerable",
     "difficulty": "medium",
-    "entrypoint": { "route": "POST /render/preview", "file": "controllers/RenderController.java", "function": "preview" },
-    "sink": { "file": "controllers/RenderController.java", "function": "preview", "line_hint": "new Template" },
-    "chain": ["controllers/RenderController.java"],
+    "entrypoint": {
+      "route": "POST /render/preview",
+      "file": "controllers/RenderController.java",
+      "function": "preview"
+    },
+    "sink": {
+      "file": "controllers/RenderController.java",
+      "function": "preview",
+      "line_hint": "new Template"
+    },
+    "chain": [
+      "controllers/RenderController.java"
+    ],
     "notes": "Freemarker Template built from a user-controlled template string."
   },
   {
@@ -126,8 +233,15 @@
     "cwe": 639,
     "expected": "vulnerable",
     "difficulty": "medium",
-    "entrypoint": { "route": "GET /users/{id}", "file": "controllers/UserController.java", "function": "getUser" },
-    "chain": ["controllers/UserController.java", "services/UserService.java"],
+    "entrypoint": {
+      "route": "GET /users/{id}",
+      "file": "controllers/UserController.java",
+      "function": "getUser"
+    },
+    "chain": [
+      "controllers/UserController.java",
+      "services/UserService.java"
+    ],
     "notes": "Fetches any user by id with no ownership check."
   },
   {
@@ -137,8 +251,15 @@
     "cwe": 840,
     "expected": "vulnerable",
     "difficulty": "medium",
-    "entrypoint": { "route": "POST /orders/transfer", "file": "controllers/OrderController.java", "function": "transfer" },
-    "chain": ["controllers/OrderController.java", "services/OrderService.java"],
+    "entrypoint": {
+      "route": "POST /orders/transfer",
+      "file": "controllers/OrderController.java",
+      "function": "transfer"
+    },
+    "chain": [
+      "controllers/OrderController.java",
+      "services/OrderService.java"
+    ],
     "notes": "Negative amounts accepted (money created); /orders/coupon reuses coupons forever."
   },
   {
@@ -148,8 +269,15 @@
     "cwe": 367,
     "expected": "vulnerable",
     "difficulty": "medium",
-    "entrypoint": { "route": "POST /orders/withdraw", "file": "controllers/OrderController.java", "function": "withdraw" },
-    "chain": ["controllers/OrderController.java", "services/OrderService.java"],
+    "entrypoint": {
+      "route": "POST /orders/withdraw",
+      "file": "controllers/OrderController.java",
+      "function": "withdraw"
+    },
+    "chain": [
+      "controllers/OrderController.java",
+      "services/OrderService.java"
+    ],
     "notes": "Check-then-act on BALANCES without synchronization; concurrent withdrawals overspend."
   },
   {
@@ -159,8 +287,14 @@
     "cwe": 269,
     "expected": "vulnerable",
     "difficulty": "shallow",
-    "entrypoint": { "route": "POST /profile/update", "file": "controllers/ProfileController.java", "function": "updateProfile" },
-    "chain": ["controllers/ProfileController.java"],
+    "entrypoint": {
+      "route": "POST /profile/update",
+      "file": "controllers/ProfileController.java",
+      "function": "updateProfile"
+    },
+    "chain": [
+      "controllers/ProfileController.java"
+    ],
     "notes": "role field accepted from request body and persisted onto the User via reflection."
   },
   {
@@ -170,8 +304,14 @@
     "cwe": 915,
     "expected": "vulnerable",
     "difficulty": "shallow",
-    "entrypoint": { "route": "POST /profile/update", "file": "controllers/ProfileController.java", "function": "updateProfile" },
-    "chain": ["controllers/ProfileController.java"],
+    "entrypoint": {
+      "route": "POST /profile/update",
+      "file": "controllers/ProfileController.java",
+      "function": "updateProfile"
+    },
+    "chain": [
+      "controllers/ProfileController.java"
+    ],
     "notes": "Every request body key is reflected onto the User object without a field allow-list."
   },
   {
@@ -181,8 +321,15 @@
     "cwe": 862,
     "expected": "vulnerable",
     "difficulty": "shallow",
-    "entrypoint": { "route": "GET /admin/users", "file": "controllers/AdminController.java", "function": "listAllUsers" },
-    "chain": ["controllers/AdminController.java", "data/UserRepository.java"],
+    "entrypoint": {
+      "route": "GET /admin/users",
+      "file": "controllers/AdminController.java",
+      "function": "listAllUsers"
+    },
+    "chain": [
+      "controllers/AdminController.java",
+      "data/UserRepository.java"
+    ],
     "notes": "Admin list/delete endpoints have no authentication or role check at all."
   },
   {
@@ -192,8 +339,15 @@
     "cwe": 287,
     "expected": "vulnerable",
     "difficulty": "medium",
-    "entrypoint": { "route": "POST /auth/login", "file": "controllers/AuthController.java", "function": "login" },
-    "chain": ["controllers/AuthController.java", "config/AppConfig.java"],
+    "entrypoint": {
+      "route": "POST /auth/login",
+      "file": "controllers/AuthController.java",
+      "function": "login"
+    },
+    "chain": [
+      "controllers/AuthController.java",
+      "config/AppConfig.java"
+    ],
     "notes": "JWT signed with hardcoded weak secret 'secret'; /auth/reset issues md5(username) as a predictable reset token; no lockout."
   },
   {
@@ -202,8 +356,59 @@
     "vuln_type": "sqli",
     "cwe": 89,
     "expected": "safe",
-    "entrypoint": { "route": "GET /users/search_safe", "file": "controllers/UserController.java", "function": "searchSafe" },
+    "entrypoint": {
+      "route": "GET /users/search_safe",
+      "file": "controllers/UserController.java",
+      "function": "searchSafe"
+    },
     "notes": "Parameterized PreparedStatement; a correct tool must NOT report this."
+  },
+  {
+    "id": "java-sqli-03",
+    "category": "A",
+    "vuln_type": "sqli",
+    "cwe": 89,
+    "expected": "vulnerable",
+    "difficulty": "medium",
+    "entrypoint": {
+      "route": "GET /users/{id}",
+      "file": "controllers/UserController.java",
+      "function": "getUser"
+    },
+    "sink": {
+      "file": "data/UserRepository.java",
+      "function": "queryUnsafe",
+      "line_hint": "executeQuery"
+    },
+    "chain": [
+      "controllers/UserController.java",
+      "services/UserService.java",
+      "data/UserRepository.java"
+    ],
+    "notes": "Path variable concatenated into the WHERE clause by UserService.findById; recorded separately from java-idor-01 which covers the same handler."
+  },
+  {
+    "id": "java-sqli-04",
+    "category": "A",
+    "vuln_type": "sqli",
+    "cwe": 89,
+    "expected": "vulnerable",
+    "difficulty": "shallow",
+    "entrypoint": {
+      "route": "DELETE /admin/users/{id}",
+      "file": "controllers/AdminController.java",
+      "function": "deleteUser"
+    },
+    "sink": {
+      "file": "data/UserRepository.java",
+      "function": "executeUnsafe",
+      "line_hint": "executeUpdate"
+    },
+    "chain": [
+      "controllers/AdminController.java",
+      "data/UserRepository.java"
+    ],
+    "notes": "DELETE statement built by string concatenation of the path variable; the java-broken-access-control-01 note covers the missing authorization only."
   },
   {
     "id": "java-safe-02",
@@ -211,7 +416,11 @@
     "vuln_type": "idor",
     "cwe": 639,
     "expected": "safe",
-    "entrypoint": { "route": "GET /users/me/{id}", "file": "controllers/UserController.java", "function": "getOwnProfile" },
+    "entrypoint": {
+      "route": "GET /users/me/{id}",
+      "file": "controllers/UserController.java",
+      "function": "getOwnProfile"
+    },
     "notes": "Ownership checked against X-User-Id header before fetching."
   },
   {
@@ -220,7 +429,11 @@
     "vuln_type": "xxe",
     "cwe": 611,
     "expected": "safe",
-    "entrypoint": { "route": "POST /xml/parse_safe", "file": "controllers/XmlController.java", "function": "parseSafe" },
+    "entrypoint": {
+      "route": "POST /xml/parse_safe",
+      "file": "controllers/XmlController.java",
+      "function": "parseSafe"
+    },
     "notes": "DTD and external entities explicitly disabled on the parser factory."
   },
   {
@@ -229,7 +442,11 @@
     "vuln_type": "path-traversal",
     "cwe": 22,
     "expected": "safe",
-    "entrypoint": { "route": "GET /files/download_safe", "file": "controllers/FileController.java", "function": "downloadSafe" },
+    "entrypoint": {
+      "route": "GET /files/download_safe",
+      "file": "controllers/FileController.java",
+      "function": "downloadSafe"
+    },
     "notes": "Filename checked against an allow-list before reading."
   },
   {
@@ -238,7 +455,11 @@
     "vuln_type": "race-condition",
     "cwe": 367,
     "expected": "safe",
-    "entrypoint": { "route": "POST /orders/withdraw_safe", "file": "controllers/OrderController.java", "function": "withdrawSafe" },
+    "entrypoint": {
+      "route": "POST /orders/withdraw_safe",
+      "file": "controllers/OrderController.java",
+      "function": "withdrawSafe"
+    },
     "notes": "Withdrawal guarded by synchronized block."
   }
 ]

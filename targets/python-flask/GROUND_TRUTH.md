@@ -10,6 +10,7 @@ deep = 4+ hops and/or taint passed through an instance field.
 |----|------|-----|------|-----|-----------|-------|---------------|---------------|-------|
 | py-sqli-01 | vuln | A | sqli | 89 | shallow | GET /users/search | users.search | data/db.py query_unsafe (`cur.execute`) | users.py → db.py |
 | py-sqli-02 | vuln | A | sqli | 89 | deep | GET /users/lookup | users.lookup | data/db.py query_unsafe (`cur.execute`) | users.py → user_service.py (field `_pending_name`) → db.py |
+| py-sqli-03 | vuln | A | sqli | 89 | medium | POST /orders/withdraw | orders.withdraw | data/db.py execute_unsafe (`cur.execute`) | orders.py → order_service.py → db.py |
 | py-xss-01 | vuln | A | xss | 79 | shallow | GET /render/hello | render.hello | render.py hello (HTML concat) | render.py |
 | py-cmdi-01 | vuln | A | cmdi | 78 | shallow | GET /tools/ping | tools.ping | tools.py ping (`os.system`) | tools.py |
 | py-cmdi-02 | vuln | A | cmdi | 78 | deep | GET /tools/diagnose | tools.diagnose | tool_service.py run_staged_diag (`os.system`) | tools.py → tool_service.py (field `_target`) |
@@ -37,3 +38,6 @@ Notes:
 - py-auth-flaws-01 also covers `/auth/reset` (predictable md5(username) token).
 - py-business-logic-01 also covers `/orders/coupon` (unlimited coupon reuse).
 - py-broken-access-control-01 also covers `DELETE /admin/users/<id>`.
+- py-sqli-03 records the SQL injection in `POST /orders/withdraw`
+  (user name interpolated into the UPDATE); py-race-condition-01 covers the
+  same handler for the unlocked check-then-act.

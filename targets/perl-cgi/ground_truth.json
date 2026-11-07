@@ -6,9 +6,20 @@
     "cwe": 89,
     "expected": "vulnerable",
     "difficulty": "shallow",
-    "entrypoint": { "route": "GET /users/search.pl", "file": "cgi-bin/users/search.pl", "function": "run" },
-    "sink": { "file": "lib/MyApp/DB.pm", "function": "query", "line_hint": "selectall_arrayref($sql)" },
-    "chain": ["cgi-bin/users/search.pl", "lib/MyApp/DB.pm"],
+    "entrypoint": {
+      "route": "GET /users/search.pl",
+      "file": "cgi-bin/users/search.pl",
+      "function": "run"
+    },
+    "sink": {
+      "file": "lib/MyApp/DB.pm",
+      "function": "query",
+      "line_hint": "selectall_arrayref($sql)"
+    },
+    "chain": [
+      "cgi-bin/users/search.pl",
+      "lib/MyApp/DB.pm"
+    ],
     "notes": "Interpolated SQL built in the script, executed one hop away."
   },
   {
@@ -18,9 +29,21 @@
     "cwe": 89,
     "expected": "vulnerable",
     "difficulty": "deep",
-    "entrypoint": { "route": "GET /users/lookup.pl", "file": "cgi-bin/users/lookup.pl", "function": "run" },
-    "sink": { "file": "lib/MyApp/DB.pm", "function": "query", "line_hint": "selectall_arrayref($sql)" },
-    "chain": ["cgi-bin/users/lookup.pl", "lib/MyApp/Service/UserService.pm", "lib/MyApp/DB.pm"],
+    "entrypoint": {
+      "route": "GET /users/lookup.pl",
+      "file": "cgi-bin/users/lookup.pl",
+      "function": "run"
+    },
+    "sink": {
+      "file": "lib/MyApp/DB.pm",
+      "function": "query",
+      "line_hint": "selectall_arrayref($sql)"
+    },
+    "chain": [
+      "cgi-bin/users/lookup.pl",
+      "lib/MyApp/Service/UserService.pm",
+      "lib/MyApp/DB.pm"
+    ],
     "notes": "Taint stored in UserService _pending_name instance field, read by find_staged(). Field-sensitive analysis required."
   },
   {
@@ -30,9 +53,19 @@
     "cwe": 79,
     "expected": "vulnerable",
     "difficulty": "shallow",
-    "entrypoint": { "route": "GET /render/hello.pl", "file": "cgi-bin/render/hello.pl", "function": "run" },
-    "sink": { "file": "cgi-bin/render/hello.pl", "function": "run", "line_hint": "print \"<h1>Hello \" . $name . \"</h1>\"" },
-    "chain": ["cgi-bin/render/hello.pl"],
+    "entrypoint": {
+      "route": "GET /render/hello.pl",
+      "file": "cgi-bin/render/hello.pl",
+      "function": "run"
+    },
+    "sink": {
+      "file": "cgi-bin/render/hello.pl",
+      "function": "run",
+      "line_hint": "print \"<h1>Hello \" . $name . \"</h1>\""
+    },
+    "chain": [
+      "cgi-bin/render/hello.pl"
+    ],
     "notes": "Reflected XSS via string concatenation into the HTML response."
   },
   {
@@ -42,9 +75,19 @@
     "cwe": 78,
     "expected": "vulnerable",
     "difficulty": "shallow",
-    "entrypoint": { "route": "GET /tools/ping.pl", "file": "cgi-bin/tools/ping.pl", "function": "run" },
-    "sink": { "file": "cgi-bin/tools/ping.pl", "function": "run", "line_hint": "system(\"ping -c 1 \" . $host)" },
-    "chain": ["cgi-bin/tools/ping.pl"],
+    "entrypoint": {
+      "route": "GET /tools/ping.pl",
+      "file": "cgi-bin/tools/ping.pl",
+      "function": "run"
+    },
+    "sink": {
+      "file": "cgi-bin/tools/ping.pl",
+      "function": "run",
+      "line_hint": "system(\"ping -c 1 \" . $host)"
+    },
+    "chain": [
+      "cgi-bin/tools/ping.pl"
+    ],
     "notes": "system() with direct string concatenation in the script."
   },
   {
@@ -54,9 +97,20 @@
     "cwe": 78,
     "expected": "vulnerable",
     "difficulty": "deep",
-    "entrypoint": { "route": "GET /tools/diagnose.pl", "file": "cgi-bin/tools/diagnose.pl", "function": "run" },
-    "sink": { "file": "lib/MyApp/Service/ToolService.pm", "function": "run_staged_diag", "line_hint": "system($cmd)" },
-    "chain": ["cgi-bin/tools/diagnose.pl", "lib/MyApp/Service/ToolService.pm"],
+    "entrypoint": {
+      "route": "GET /tools/diagnose.pl",
+      "file": "cgi-bin/tools/diagnose.pl",
+      "function": "run"
+    },
+    "sink": {
+      "file": "lib/MyApp/Service/ToolService.pm",
+      "function": "run_staged_diag",
+      "line_hint": "system($cmd)"
+    },
+    "chain": [
+      "cgi-bin/tools/diagnose.pl",
+      "lib/MyApp/Service/ToolService.pm"
+    ],
     "notes": "Taint stored in ToolService _target instance field, read by run_staged_diag(). Field-sensitive analysis required."
   },
   {
@@ -66,9 +120,20 @@
     "cwe": 22,
     "expected": "vulnerable",
     "difficulty": "medium",
-    "entrypoint": { "route": "GET /files/download.pl", "file": "cgi-bin/files/download.pl", "function": "run" },
-    "sink": { "file": "lib/MyApp/Service/FileService.pm", "function": "read_user_file", "line_hint": "open(my $fh, \"<$path\")" },
-    "chain": ["cgi-bin/files/download.pl", "lib/MyApp/Service/FileService.pm"],
+    "entrypoint": {
+      "route": "GET /files/download.pl",
+      "file": "cgi-bin/files/download.pl",
+      "function": "run"
+    },
+    "sink": {
+      "file": "lib/MyApp/Service/FileService.pm",
+      "function": "read_user_file",
+      "line_hint": "open(my $fh, \"<$path\")"
+    },
+    "chain": [
+      "cgi-bin/files/download.pl",
+      "lib/MyApp/Service/FileService.pm"
+    ],
     "notes": "User-controlled name joined onto UPLOAD_DIR without normalization; 2-arg open."
   },
   {
@@ -78,9 +143,19 @@
     "cwe": 94,
     "expected": "vulnerable",
     "difficulty": "shallow",
-    "entrypoint": { "route": "POST /tools/calc.pl", "file": "cgi-bin/tools/calc.pl", "function": "run" },
-    "sink": { "file": "cgi-bin/tools/calc.pl", "function": "run", "line_hint": "eval $expr" },
-    "chain": ["cgi-bin/tools/calc.pl"],
+    "entrypoint": {
+      "route": "POST /tools/calc.pl",
+      "file": "cgi-bin/tools/calc.pl",
+      "function": "run"
+    },
+    "sink": {
+      "file": "cgi-bin/tools/calc.pl",
+      "function": "run",
+      "line_hint": "eval $expr"
+    },
+    "chain": [
+      "cgi-bin/tools/calc.pl"
+    ],
     "notes": "String eval on the expr request parameter."
   },
   {
@@ -90,9 +165,19 @@
     "cwe": 611,
     "expected": "vulnerable",
     "difficulty": "shallow",
-    "entrypoint": { "route": "POST /xml/parse.pl", "file": "cgi-bin/xml/parse.pl", "function": "run" },
-    "sink": { "file": "cgi-bin/xml/parse.pl", "function": "run", "line_hint": "expand_entities => 1" },
-    "chain": ["cgi-bin/xml/parse.pl"],
+    "entrypoint": {
+      "route": "POST /xml/parse.pl",
+      "file": "cgi-bin/xml/parse.pl",
+      "function": "run"
+    },
+    "sink": {
+      "file": "cgi-bin/xml/parse.pl",
+      "function": "run",
+      "line_hint": "expand_entities => 1"
+    },
+    "chain": [
+      "cgi-bin/xml/parse.pl"
+    ],
     "notes": "XML::LibXML with expand_entities/load_ext_dtd enabled parsing the raw request body."
   },
   {
@@ -102,9 +187,19 @@
     "cwe": 502,
     "expected": "vulnerable",
     "difficulty": "shallow",
-    "entrypoint": { "route": "POST /profile/import.pl", "file": "cgi-bin/profile/import.pl", "function": "run" },
-    "sink": { "file": "cgi-bin/profile/import.pl", "function": "run", "line_hint": "thaw($data)" },
-    "chain": ["cgi-bin/profile/import.pl"],
+    "entrypoint": {
+      "route": "POST /profile/import.pl",
+      "file": "cgi-bin/profile/import.pl",
+      "function": "run"
+    },
+    "sink": {
+      "file": "cgi-bin/profile/import.pl",
+      "function": "run",
+      "line_hint": "thaw($data)"
+    },
+    "chain": [
+      "cgi-bin/profile/import.pl"
+    ],
     "notes": "Storable::thaw on the raw request body."
   },
   {
@@ -114,9 +209,19 @@
     "cwe": 1336,
     "expected": "vulnerable",
     "difficulty": "shallow",
-    "entrypoint": { "route": "GET /render/preview.pl", "file": "cgi-bin/render/preview.pl", "function": "run" },
-    "sink": { "file": "cgi-bin/render/preview.pl", "function": "run", "line_hint": "$tt->process(\\$tpl" },
-    "chain": ["cgi-bin/render/preview.pl"],
+    "entrypoint": {
+      "route": "GET /render/preview.pl",
+      "file": "cgi-bin/render/preview.pl",
+      "function": "run"
+    },
+    "sink": {
+      "file": "cgi-bin/render/preview.pl",
+      "function": "run",
+      "line_hint": "$tt->process(\\$tpl"
+    },
+    "chain": [
+      "cgi-bin/render/preview.pl"
+    ],
     "notes": "User-controlled template string rendered directly by Template Toolkit."
   },
   {
@@ -126,8 +231,15 @@
     "cwe": 639,
     "expected": "vulnerable",
     "difficulty": "medium",
-    "entrypoint": { "route": "GET /users/view.pl", "file": "cgi-bin/users/view.pl", "function": "run" },
-    "chain": ["cgi-bin/users/view.pl", "lib/MyApp/Service/UserService.pm"],
+    "entrypoint": {
+      "route": "GET /users/view.pl",
+      "file": "cgi-bin/users/view.pl",
+      "function": "run"
+    },
+    "chain": [
+      "cgi-bin/users/view.pl",
+      "lib/MyApp/Service/UserService.pm"
+    ],
     "notes": "Fetches any user by id with no ownership check."
   },
   {
@@ -137,8 +249,15 @@
     "cwe": 840,
     "expected": "vulnerable",
     "difficulty": "medium",
-    "entrypoint": { "route": "POST /orders/transfer.pl", "file": "cgi-bin/orders/transfer.pl", "function": "run" },
-    "chain": ["cgi-bin/orders/transfer.pl", "lib/MyApp/Service/OrderService.pm"],
+    "entrypoint": {
+      "route": "POST /orders/transfer.pl",
+      "file": "cgi-bin/orders/transfer.pl",
+      "function": "run"
+    },
+    "chain": [
+      "cgi-bin/orders/transfer.pl",
+      "lib/MyApp/Service/OrderService.pm"
+    ],
     "notes": "Negative amounts accepted (money created); /orders/coupon.pl reuses coupons forever."
   },
   {
@@ -148,8 +267,15 @@
     "cwe": 367,
     "expected": "vulnerable",
     "difficulty": "medium",
-    "entrypoint": { "route": "POST /orders/withdraw.pl", "file": "cgi-bin/orders/withdraw.pl", "function": "run" },
-    "chain": ["cgi-bin/orders/withdraw.pl", "lib/MyApp/Service/OrderService.pm"],
+    "entrypoint": {
+      "route": "POST /orders/withdraw.pl",
+      "file": "cgi-bin/orders/withdraw.pl",
+      "function": "run"
+    },
+    "chain": [
+      "cgi-bin/orders/withdraw.pl",
+      "lib/MyApp/Service/OrderService.pm"
+    ],
     "notes": "Check-then-act on BALANCES without a lock; concurrent withdrawals overspend."
   },
   {
@@ -159,8 +285,14 @@
     "cwe": 269,
     "expected": "vulnerable",
     "difficulty": "shallow",
-    "entrypoint": { "route": "POST /profile/update.pl", "file": "cgi-bin/profile/update.pl", "function": "run" },
-    "chain": ["cgi-bin/profile/update.pl"],
+    "entrypoint": {
+      "route": "POST /profile/update.pl",
+      "file": "cgi-bin/profile/update.pl",
+      "function": "run"
+    },
+    "chain": [
+      "cgi-bin/profile/update.pl"
+    ],
     "notes": "role field accepted from request parameters and persisted onto the user record."
   },
   {
@@ -170,8 +302,14 @@
     "cwe": 915,
     "expected": "vulnerable",
     "difficulty": "shallow",
-    "entrypoint": { "route": "POST /profile/update.pl", "file": "cgi-bin/profile/update.pl", "function": "run" },
-    "chain": ["cgi-bin/profile/update.pl"],
+    "entrypoint": {
+      "route": "POST /profile/update.pl",
+      "file": "cgi-bin/profile/update.pl",
+      "function": "run"
+    },
+    "chain": [
+      "cgi-bin/profile/update.pl"
+    ],
     "notes": "Parameter loop copies every request key onto the user record."
   },
   {
@@ -181,8 +319,15 @@
     "cwe": 862,
     "expected": "vulnerable",
     "difficulty": "shallow",
-    "entrypoint": { "route": "GET /admin/users.pl", "file": "cgi-bin/admin/users.pl", "function": "run" },
-    "chain": ["cgi-bin/admin/users.pl", "lib/MyApp/DB.pm"],
+    "entrypoint": {
+      "route": "GET /admin/users.pl",
+      "file": "cgi-bin/admin/users.pl",
+      "function": "run"
+    },
+    "chain": [
+      "cgi-bin/admin/users.pl",
+      "lib/MyApp/DB.pm"
+    ],
     "notes": "Admin list/delete scripts have no authentication or role check at all."
   },
   {
@@ -192,8 +337,15 @@
     "cwe": 287,
     "expected": "vulnerable",
     "difficulty": "medium",
-    "entrypoint": { "route": "POST /auth/login.pl", "file": "cgi-bin/auth/login.pl", "function": "run" },
-    "chain": ["cgi-bin/auth/login.pl", "lib/MyApp/Config.pm"],
+    "entrypoint": {
+      "route": "POST /auth/login.pl",
+      "file": "cgi-bin/auth/login.pl",
+      "function": "run"
+    },
+    "chain": [
+      "cgi-bin/auth/login.pl",
+      "lib/MyApp/Config.pm"
+    ],
     "notes": "Session token HMAC-signed with hardcoded weak secret 'secret'; /auth/reset.pl issues md5(username) as a predictable reset token; no lockout."
   },
   {
@@ -202,8 +354,83 @@
     "vuln_type": "sqli",
     "cwe": 89,
     "expected": "safe",
-    "entrypoint": { "route": "GET /users/search2.pl", "file": "cgi-bin/users/search2.pl", "function": "run" },
+    "entrypoint": {
+      "route": "GET /users/search2.pl",
+      "file": "cgi-bin/users/search2.pl",
+      "function": "run"
+    },
     "notes": "Parameterized query via DB placeholders; a correct tool must NOT report this."
+  },
+  {
+    "id": "pl-sqli-03",
+    "category": "A",
+    "vuln_type": "sqli",
+    "cwe": 89,
+    "expected": "vulnerable",
+    "difficulty": "medium",
+    "entrypoint": {
+      "route": "GET /users/view.pl",
+      "file": "cgi-bin/users/view.pl",
+      "function": "run"
+    },
+    "sink": {
+      "file": "lib/MyApp/DB.pm",
+      "function": "query",
+      "line_hint": "selectall_arrayref"
+    },
+    "chain": [
+      "cgi-bin/users/view.pl",
+      "lib/MyApp/Service/UserService.pm",
+      "lib/MyApp/DB.pm"
+    ],
+    "notes": "String id interpolated into the WHERE clause by UserService::find_by_id; recorded separately from pl-idor-01 which covers the same script."
+  },
+  {
+    "id": "pl-sqli-04",
+    "category": "A",
+    "vuln_type": "sqli",
+    "cwe": 89,
+    "expected": "vulnerable",
+    "difficulty": "shallow",
+    "entrypoint": {
+      "route": "POST /admin/delete.pl",
+      "file": "cgi-bin/admin/delete.pl",
+      "function": "run"
+    },
+    "sink": {
+      "file": "lib/MyApp/DB.pm",
+      "function": "execute",
+      "line_hint": "do"
+    },
+    "chain": [
+      "cgi-bin/admin/delete.pl",
+      "lib/MyApp/DB.pm"
+    ],
+    "notes": "DELETE statement interpolated from the id parameter in the script itself; the pl-broken-access-control-01 note covers the missing authorization only."
+  },
+  {
+    "id": "pl-sqli-05",
+    "category": "A",
+    "vuln_type": "sqli",
+    "cwe": 89,
+    "expected": "vulnerable",
+    "difficulty": "medium",
+    "entrypoint": {
+      "route": "POST /orders/withdraw.pl",
+      "file": "cgi-bin/orders/withdraw.pl",
+      "function": "run"
+    },
+    "sink": {
+      "file": "lib/MyApp/DB.pm",
+      "function": "execute",
+      "line_hint": "do"
+    },
+    "chain": [
+      "cgi-bin/orders/withdraw.pl",
+      "lib/MyApp/Service/OrderService.pm",
+      "lib/MyApp/DB.pm"
+    ],
+    "notes": "User name interpolated into the UPDATE statement by OrderService::withdraw; recorded separately from pl-race-condition-01 which covers the same script."
   },
   {
     "id": "pl-safe-02",
@@ -211,7 +438,11 @@
     "vuln_type": "idor",
     "cwe": 639,
     "expected": "safe",
-    "entrypoint": { "route": "GET /users/me.pl", "file": "cgi-bin/users/me.pl", "function": "run" },
+    "entrypoint": {
+      "route": "GET /users/me.pl",
+      "file": "cgi-bin/users/me.pl",
+      "function": "run"
+    },
     "notes": "Ownership checked against the X-User-Id request header before fetching."
   },
   {
@@ -220,7 +451,11 @@
     "vuln_type": "xxe",
     "cwe": 611,
     "expected": "safe",
-    "entrypoint": { "route": "POST /xml/parse2.pl", "file": "cgi-bin/xml/parse2.pl", "function": "run" },
+    "entrypoint": {
+      "route": "POST /xml/parse2.pl",
+      "file": "cgi-bin/xml/parse2.pl",
+      "function": "run"
+    },
     "notes": "XML::LibXML with expand_entities/load_ext_dtd disabled; entities rejected."
   },
   {
@@ -229,7 +464,11 @@
     "vuln_type": "path-traversal",
     "cwe": 22,
     "expected": "safe",
-    "entrypoint": { "route": "GET /files/download2.pl", "file": "cgi-bin/files/download2.pl", "function": "run" },
+    "entrypoint": {
+      "route": "GET /files/download2.pl",
+      "file": "cgi-bin/files/download2.pl",
+      "function": "run"
+    },
     "notes": "Filename checked against an allow-list before reading; 3-arg open."
   },
   {
@@ -238,7 +477,11 @@
     "vuln_type": "race-condition",
     "cwe": 367,
     "expected": "safe",
-    "entrypoint": { "route": "POST /orders/withdraw2.pl", "file": "cgi-bin/orders/withdraw2.pl", "function": "run" },
+    "entrypoint": {
+      "route": "POST /orders/withdraw2.pl",
+      "file": "cgi-bin/orders/withdraw2.pl",
+      "function": "run"
+    },
     "notes": "Withdrawal guarded by flock on a lockfile."
   }
 ]

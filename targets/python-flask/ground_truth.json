@@ -6,9 +6,20 @@
     "cwe": 89,
     "expected": "vulnerable",
     "difficulty": "shallow",
-    "entrypoint": { "route": "GET /users/search", "file": "routes/users.py", "function": "search" },
-    "sink": { "file": "data/db.py", "function": "query_unsafe", "line_hint": "cur.execute" },
-    "chain": ["routes/users.py", "data/db.py"],
+    "entrypoint": {
+      "route": "GET /users/search",
+      "file": "routes/users.py",
+      "function": "search"
+    },
+    "sink": {
+      "file": "data/db.py",
+      "function": "query_unsafe",
+      "line_hint": "cur.execute"
+    },
+    "chain": [
+      "routes/users.py",
+      "data/db.py"
+    ],
     "notes": "f-string SQL built in the handler, executed one hop away."
   },
   {
@@ -18,9 +29,21 @@
     "cwe": 89,
     "expected": "vulnerable",
     "difficulty": "deep",
-    "entrypoint": { "route": "GET /users/lookup", "file": "routes/users.py", "function": "lookup" },
-    "sink": { "file": "data/db.py", "function": "query_unsafe", "line_hint": "cur.execute" },
-    "chain": ["routes/users.py", "services/user_service.py", "data/db.py"],
+    "entrypoint": {
+      "route": "GET /users/lookup",
+      "file": "routes/users.py",
+      "function": "lookup"
+    },
+    "sink": {
+      "file": "data/db.py",
+      "function": "query_unsafe",
+      "line_hint": "cur.execute"
+    },
+    "chain": [
+      "routes/users.py",
+      "services/user_service.py",
+      "data/db.py"
+    ],
     "notes": "Taint stored in UserService._pending_name instance field, read by find_staged(). Field-sensitive analysis required."
   },
   {
@@ -30,9 +53,19 @@
     "cwe": 79,
     "expected": "vulnerable",
     "difficulty": "shallow",
-    "entrypoint": { "route": "GET /render/hello", "file": "routes/render.py", "function": "hello" },
-    "sink": { "file": "routes/render.py", "function": "hello", "line_hint": "return \"<h1>Hello \"" },
-    "chain": ["routes/render.py"],
+    "entrypoint": {
+      "route": "GET /render/hello",
+      "file": "routes/render.py",
+      "function": "hello"
+    },
+    "sink": {
+      "file": "routes/render.py",
+      "function": "hello",
+      "line_hint": "return \"<h1>Hello \""
+    },
+    "chain": [
+      "routes/render.py"
+    ],
     "notes": "Reflected XSS via string concatenation into the HTML response."
   },
   {
@@ -42,9 +75,19 @@
     "cwe": 78,
     "expected": "vulnerable",
     "difficulty": "shallow",
-    "entrypoint": { "route": "GET /tools/ping", "file": "routes/tools.py", "function": "ping" },
-    "sink": { "file": "routes/tools.py", "function": "ping", "line_hint": "os.system" },
-    "chain": ["routes/tools.py"],
+    "entrypoint": {
+      "route": "GET /tools/ping",
+      "file": "routes/tools.py",
+      "function": "ping"
+    },
+    "sink": {
+      "file": "routes/tools.py",
+      "function": "ping",
+      "line_hint": "os.system"
+    },
+    "chain": [
+      "routes/tools.py"
+    ],
     "notes": "os.system with direct string concatenation in the handler."
   },
   {
@@ -54,9 +97,20 @@
     "cwe": 78,
     "expected": "vulnerable",
     "difficulty": "deep",
-    "entrypoint": { "route": "GET /tools/diagnose", "file": "routes/tools.py", "function": "diagnose" },
-    "sink": { "file": "services/tool_service.py", "function": "run_staged_diag", "line_hint": "os.system" },
-    "chain": ["routes/tools.py", "services/tool_service.py"],
+    "entrypoint": {
+      "route": "GET /tools/diagnose",
+      "file": "routes/tools.py",
+      "function": "diagnose"
+    },
+    "sink": {
+      "file": "services/tool_service.py",
+      "function": "run_staged_diag",
+      "line_hint": "os.system"
+    },
+    "chain": [
+      "routes/tools.py",
+      "services/tool_service.py"
+    ],
     "notes": "Taint stored in ToolService._target instance field, read by run_staged_diag(). Field-sensitive analysis required."
   },
   {
@@ -66,9 +120,20 @@
     "cwe": 22,
     "expected": "vulnerable",
     "difficulty": "medium",
-    "entrypoint": { "route": "GET /files/download", "file": "routes/files.py", "function": "download" },
-    "sink": { "file": "services/file_service.py", "function": "read_user_file", "line_hint": "open(path" },
-    "chain": ["routes/files.py", "services/file_service.py"],
+    "entrypoint": {
+      "route": "GET /files/download",
+      "file": "routes/files.py",
+      "function": "download"
+    },
+    "sink": {
+      "file": "services/file_service.py",
+      "function": "read_user_file",
+      "line_hint": "open(path"
+    },
+    "chain": [
+      "routes/files.py",
+      "services/file_service.py"
+    ],
     "notes": "User-controlled name joined onto UPLOAD_DIR without normalization."
   },
   {
@@ -78,9 +143,19 @@
     "cwe": 94,
     "expected": "vulnerable",
     "difficulty": "shallow",
-    "entrypoint": { "route": "POST /tools/calc", "file": "routes/tools.py", "function": "calc" },
-    "sink": { "file": "routes/tools.py", "function": "calc", "line_hint": "eval(" },
-    "chain": ["routes/tools.py"],
+    "entrypoint": {
+      "route": "POST /tools/calc",
+      "file": "routes/tools.py",
+      "function": "calc"
+    },
+    "sink": {
+      "file": "routes/tools.py",
+      "function": "calc",
+      "line_hint": "eval("
+    },
+    "chain": [
+      "routes/tools.py"
+    ],
     "notes": "eval() on request JSON body."
   },
   {
@@ -90,9 +165,19 @@
     "cwe": 611,
     "expected": "vulnerable",
     "difficulty": "shallow",
-    "entrypoint": { "route": "POST /xml/parse", "file": "routes/xml.py", "function": "parse_xml" },
-    "sink": { "file": "routes/xml.py", "function": "parse_xml", "line_hint": "resolve_entities=True" },
-    "chain": ["routes/xml.py"],
+    "entrypoint": {
+      "route": "POST /xml/parse",
+      "file": "routes/xml.py",
+      "function": "parse_xml"
+    },
+    "sink": {
+      "file": "routes/xml.py",
+      "function": "parse_xml",
+      "line_hint": "resolve_entities=True"
+    },
+    "chain": [
+      "routes/xml.py"
+    ],
     "notes": "lxml XMLParser with resolve_entities=True and no_network=False."
   },
   {
@@ -102,9 +187,19 @@
     "cwe": 502,
     "expected": "vulnerable",
     "difficulty": "shallow",
-    "entrypoint": { "route": "POST /profile/import", "file": "routes/profile.py", "function": "import_profile" },
-    "sink": { "file": "routes/profile.py", "function": "import_profile", "line_hint": "pickle.loads" },
-    "chain": ["routes/profile.py"],
+    "entrypoint": {
+      "route": "POST /profile/import",
+      "file": "routes/profile.py",
+      "function": "import_profile"
+    },
+    "sink": {
+      "file": "routes/profile.py",
+      "function": "import_profile",
+      "line_hint": "pickle.loads"
+    },
+    "chain": [
+      "routes/profile.py"
+    ],
     "notes": "pickle.loads on the raw request body."
   },
   {
@@ -114,9 +209,19 @@
     "cwe": 1336,
     "expected": "vulnerable",
     "difficulty": "shallow",
-    "entrypoint": { "route": "GET /render/preview", "file": "routes/render.py", "function": "preview" },
-    "sink": { "file": "routes/render.py", "function": "preview", "line_hint": "render_template_string" },
-    "chain": ["routes/render.py"],
+    "entrypoint": {
+      "route": "GET /render/preview",
+      "file": "routes/render.py",
+      "function": "preview"
+    },
+    "sink": {
+      "file": "routes/render.py",
+      "function": "preview",
+      "line_hint": "render_template_string"
+    },
+    "chain": [
+      "routes/render.py"
+    ],
     "notes": "User-controlled template rendered directly."
   },
   {
@@ -126,8 +231,15 @@
     "cwe": 639,
     "expected": "vulnerable",
     "difficulty": "medium",
-    "entrypoint": { "route": "GET /users/<id>", "file": "routes/users.py", "function": "get_user" },
-    "chain": ["routes/users.py", "services/user_service.py"],
+    "entrypoint": {
+      "route": "GET /users/<id>",
+      "file": "routes/users.py",
+      "function": "get_user"
+    },
+    "chain": [
+      "routes/users.py",
+      "services/user_service.py"
+    ],
     "notes": "Fetches any user by id with no ownership check."
   },
   {
@@ -137,8 +249,15 @@
     "cwe": 840,
     "expected": "vulnerable",
     "difficulty": "medium",
-    "entrypoint": { "route": "POST /orders/transfer", "file": "routes/orders.py", "function": "transfer" },
-    "chain": ["routes/orders.py", "services/order_service.py"],
+    "entrypoint": {
+      "route": "POST /orders/transfer",
+      "file": "routes/orders.py",
+      "function": "transfer"
+    },
+    "chain": [
+      "routes/orders.py",
+      "services/order_service.py"
+    ],
     "notes": "Negative amounts accepted (money created); /orders/coupon reuses coupons forever."
   },
   {
@@ -148,8 +267,15 @@
     "cwe": 367,
     "expected": "vulnerable",
     "difficulty": "medium",
-    "entrypoint": { "route": "POST /orders/withdraw", "file": "routes/orders.py", "function": "withdraw" },
-    "chain": ["routes/orders.py", "services/order_service.py"],
+    "entrypoint": {
+      "route": "POST /orders/withdraw",
+      "file": "routes/orders.py",
+      "function": "withdraw"
+    },
+    "chain": [
+      "routes/orders.py",
+      "services/order_service.py"
+    ],
     "notes": "Check-then-act on BALANCES without a lock; concurrent withdrawals overspend."
   },
   {
@@ -159,8 +285,14 @@
     "cwe": 269,
     "expected": "vulnerable",
     "difficulty": "shallow",
-    "entrypoint": { "route": "POST /profile/update", "file": "routes/profile.py", "function": "update_profile" },
-    "chain": ["routes/profile.py"],
+    "entrypoint": {
+      "route": "POST /profile/update",
+      "file": "routes/profile.py",
+      "function": "update_profile"
+    },
+    "chain": [
+      "routes/profile.py"
+    ],
     "notes": "role field accepted from request body and persisted onto the User."
   },
   {
@@ -170,8 +302,14 @@
     "cwe": 915,
     "expected": "vulnerable",
     "difficulty": "shallow",
-    "entrypoint": { "route": "POST /profile/update", "file": "routes/profile.py", "function": "update_profile" },
-    "chain": ["routes/profile.py"],
+    "entrypoint": {
+      "route": "POST /profile/update",
+      "file": "routes/profile.py",
+      "function": "update_profile"
+    },
+    "chain": [
+      "routes/profile.py"
+    ],
     "notes": "setattr loop copies every request body key onto the User object."
   },
   {
@@ -181,8 +319,15 @@
     "cwe": 862,
     "expected": "vulnerable",
     "difficulty": "shallow",
-    "entrypoint": { "route": "GET /admin/users", "file": "routes/admin.py", "function": "list_all_users" },
-    "chain": ["routes/admin.py", "data/db.py"],
+    "entrypoint": {
+      "route": "GET /admin/users",
+      "file": "routes/admin.py",
+      "function": "list_all_users"
+    },
+    "chain": [
+      "routes/admin.py",
+      "data/db.py"
+    ],
     "notes": "Admin list/delete endpoints have no authentication or role check at all."
   },
   {
@@ -192,8 +337,15 @@
     "cwe": 287,
     "expected": "vulnerable",
     "difficulty": "medium",
-    "entrypoint": { "route": "POST /auth/login", "file": "routes/auth.py", "function": "login" },
-    "chain": ["routes/auth.py", "config.py"],
+    "entrypoint": {
+      "route": "POST /auth/login",
+      "file": "routes/auth.py",
+      "function": "login"
+    },
+    "chain": [
+      "routes/auth.py",
+      "config.py"
+    ],
     "notes": "JWT signed with hardcoded weak secret 'secret'; /auth/reset issues md5(username) as a predictable reset token; no lockout."
   },
   {
@@ -202,8 +354,36 @@
     "vuln_type": "sqli",
     "cwe": 89,
     "expected": "safe",
-    "entrypoint": { "route": "GET /users/search_safe", "file": "routes/users.py", "function": "search_safe" },
+    "entrypoint": {
+      "route": "GET /users/search_safe",
+      "file": "routes/users.py",
+      "function": "search_safe"
+    },
     "notes": "Parameterized query via query_safe; a correct tool must NOT report this."
+  },
+  {
+    "id": "py-sqli-03",
+    "category": "A",
+    "vuln_type": "sqli",
+    "cwe": 89,
+    "expected": "vulnerable",
+    "difficulty": "medium",
+    "entrypoint": {
+      "route": "POST /orders/withdraw",
+      "file": "routes/orders.py",
+      "function": "withdraw"
+    },
+    "sink": {
+      "file": "data/db.py",
+      "function": "execute_unsafe",
+      "line_hint": "cur.execute"
+    },
+    "chain": [
+      "routes/orders.py",
+      "services/order_service.py",
+      "data/db.py"
+    ],
+    "notes": "Withdrawal handler interpolates the request-controlled user name into the UPDATE statement via OrderService.withdraw; recorded separately from py-race-condition-01 which covers the same handler."
   },
   {
     "id": "py-safe-02",
@@ -211,7 +391,11 @@
     "vuln_type": "idor",
     "cwe": 639,
     "expected": "safe",
-    "entrypoint": { "route": "GET /users/me/<id>", "file": "routes/users.py", "function": "get_own_profile" },
+    "entrypoint": {
+      "route": "GET /users/me/<id>",
+      "file": "routes/users.py",
+      "function": "get_own_profile"
+    },
     "notes": "Ownership checked against X-User-Id header before fetching."
   },
   {
@@ -220,7 +404,11 @@
     "vuln_type": "xxe",
     "cwe": 611,
     "expected": "safe",
-    "entrypoint": { "route": "POST /xml/parse_safe", "file": "routes/xml.py", "function": "parse_xml_safe" },
+    "entrypoint": {
+      "route": "POST /xml/parse_safe",
+      "file": "routes/xml.py",
+      "function": "parse_xml_safe"
+    },
     "notes": "defusedxml is used; entities rejected."
   },
   {
@@ -229,7 +417,11 @@
     "vuln_type": "path-traversal",
     "cwe": 22,
     "expected": "safe",
-    "entrypoint": { "route": "GET /files/download_safe", "file": "routes/files.py", "function": "download_safe" },
+    "entrypoint": {
+      "route": "GET /files/download_safe",
+      "file": "routes/files.py",
+      "function": "download_safe"
+    },
     "notes": "Filename checked against an allow-list before reading."
   },
   {
@@ -238,7 +430,11 @@
     "vuln_type": "race-condition",
     "cwe": 367,
     "expected": "safe",
-    "entrypoint": { "route": "POST /orders/withdraw_safe", "file": "routes/orders.py", "function": "withdraw_safe" },
+    "entrypoint": {
+      "route": "POST /orders/withdraw_safe",
+      "file": "routes/orders.py",
+      "function": "withdraw_safe"
+    },
     "notes": "Withdrawal guarded by threading.Lock."
   }
 ]
