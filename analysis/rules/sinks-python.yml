@@ -41,8 +41,11 @@ rules:
     severity: WARNING
     message: XML parsing (potential XXE sink)
     metadata: { vuln_type: xxe, cwe: "611" }
+    # Anchor on the consuming call whose xml-content argument carries the
+    # taint; the XMLParser(resolve_entities=...) constructor is a config
+    # marker whose arguments are literals, so a sink record there can never
+    # be taint-CONFIRMED (structural GAP_FLOW_DEAD noise).
     pattern-either:
-      - pattern: $M.XMLParser(...)
       - pattern: $M.fromstring($X, ...)
       - pattern: $M.parse($X, ...)
       - pattern: $M.parseString($X, ...)
